@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la /SSD/guest/chojoonghui/FinPilot/ 2>/dev/null && echo \"---\" && ls /SSD/guest/chojoonghui/ 2>/dev/null)",
+      "Read(//SSD/guest/chojoonghui/**)",
+      "Bash(pip --version)",
+      "Bash(npm --version)",
+      "Bash(docker --version)",
+      "Bash(docker compose *)",
+      "Bash(psql --version)",
+      "Bash(redis-cli --version)",
+      "Bash(ls /SSD/guest/chojoonghui/ | grep -i model; find /SSD/guest -name \"*.gguf\" -o -name \"config.json\" 2>/dev/null | grep -i qwen | head -10; find /home/guest -name \"*.gguf\" 2>/dev/null | head -5)",
+      "Read(//SSD/guest/**)",
+      "Bash(netstat -tlnp)",
+      "Bash(pg_isready)",
+      "Bash(psql -U postgres -c \"SELECT 1\")",
+      "Bash(redis-cli ping *)",
+      "Bash(conda install *)",
+      "Bash(# Initialize PostgreSQL data directory *)",
+      "Bash(curl -s http://localhost:8000/api/health)",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -sv -X POST http://localhost:8000/api/auth/register -H 'Content-Type: application/json' -d '{\"email\":\"test@finpilot.com\",\"password\":\"test1234\",\"name\":\"테스트\"}')",
+      "Bash(pkill -f \"uvicorn\")",
+      "Bash(nohup /home/guest/anaconda3/envs/finpilot-llm/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000)",
+      "Bash(echo \"PID: $!\")"
+    ],
+    "additionalDirectories": [
+      "/SSD/guest/chojoonghui/FinPilot/data"
+    ]
+  }
+}

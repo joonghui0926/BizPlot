@@ -1,0 +1,21 @@
+# ───────────────────────────────────────────────────────────────
+# Cloudflare Named Tunnel 설정 예시 (www.xxx.kr 영구 배포용)
+# 1) ./bin/cloudflared tunnel login           (브라우저로 Cloudflare 로그인·도메인 인가)
+# 2) ./bin/cloudflared tunnel create finpilot (TUNNEL_ID 발급)
+# 3) 아래 <TUNNEL_ID> / 도메인 채운 뒤 ~/.cloudflared/config.yml 로 복사
+# 4) ./bin/cloudflared tunnel route dns finpilot www.<도메인>.kr
+#    ./bin/cloudflared tunnel route dns finpilot <도메인>.kr
+# 5) scripts/tunnel_named.sh 로 실행
+# ───────────────────────────────────────────────────────────────
+tunnel: <TUNNEL_ID>
+credentials-file: /home/guest/.cloudflared/<TUNNEL_ID>.json
+
+ingress:
+  # www 및 루트 도메인 → 로컬 프론트(:3000)
+  # 프론트가 /api 요청을 내부적으로 :8000(FastAPI)로 프록시하므로 3000만 노출하면 됨
+  - hostname: www.<도메인>.kr
+    service: http://localhost:3000
+  - hostname: <도메인>.kr
+    service: http://localhost:3000
+  # 그 외 모든 요청
+  - service: http_status:404

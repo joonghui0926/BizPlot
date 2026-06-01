@@ -1,0 +1,148 @@
+@import "tailwindcss";
+
+:root {
+  --blue: #3253E9;
+  --blue-d: #253FB8;
+  --blue-l: #5B73F0;
+  --blue-50: #F3F6FF;
+  --blue-100: #E5EBFF;
+  --logo: #3253E9;
+  --ink: #0F172A;
+  --ink-2: #293548;
+  --muted: #647488;
+  --muted-2: #9AA7B7;
+  --line: #E6EBF2;
+  --line-2: #EEF1F6;
+  --ok: #357A54;
+  --ok-bg: #EEF7F1;
+  --warn: #9A6A22;
+  --warn-bg: #F8F2E4;
+  --risk: #B85B5B;
+  --risk-bg: #FAEEEE;
+  --surface: #F7F9FC;
+  --surface-2: #F2F5F9;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-family: -apple-system, "Pretendard", BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #fff;
+  color: #0F172A;
+  min-height: 100vh;
+}
+
+html {
+  background: #fff;
+}
+
+.tabular-nums { font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
+.pb-safe { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+
+/* 콘텐츠 패널 — 그라데이션 위 평평한 흰 패널 (라운드 박스 아님, 좌우 여백에 그라데이션 비침) */
+.app-panel {
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--line-2), 0 24px 50px -34px rgba(20,30,55,.20);
+}
+@media (min-width: 1024px) {
+  .app-panel { min-height: calc(100vh - 56px); }
+}
+
+/* 섹션 구분 밴드 — 두꺼운 회색 띠 (mockup .divfull) */
+.band {
+  height: 8px;
+  background: var(--soft);
+  border-top: 1px solid var(--line-2);
+  border-bottom: 1px solid var(--line-2);
+}
+
+/* 섹션 헤더 — 파란 3px 세로 바 + 제목 */
+.sec-title {
+  font-weight: 800;
+  letter-spacing: -.2px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.sec-title::before {
+  content: "";
+  display: inline-block;
+  width: 3px;
+  height: 14px;
+  background: var(--blue);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-up { animation: slideUp 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) forwards; }
+
+@keyframes riseIn {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+.rise { opacity: 0; animation: riseIn .55s cubic-bezier(.2,.7,.2,1) forwards; }
+
+/* Calmer application palette
+   Keep the UI mostly neutral, reserve saturated color for the primary action,
+   and make semantic colors muted enough that dense dashboards stay scannable. */
+.text-\[\#3253E9\],
+.text-blue-500,
+.text-blue-600,
+.text-blue-700 { color: var(--blue) !important; }
+.text-green-500,
+.text-green-600,
+.text-green-700,
+.text-emerald-700 { color: var(--ok) !important; }
+.text-amber-500,
+.text-amber-600,
+.text-amber-700 { color: var(--warn) !important; }
+.text-red-500,
+.text-red-600,
+.text-red-700 { color: var(--risk) !important; }
+
+.bg-blue-400,
+.bg-blue-500,
+.bg-blue-600 { background-color: var(--blue) !important; }
+.bg-blue-700,
+.bg-blue-800,
+.bg-blue-900 { background-color: var(--blue-d) !important; }
+.bg-blue-50 { background-color: var(--blue-50) !important; }
+.bg-blue-100 { background-color: var(--blue-100) !important; }
+
+.bg-green-400,
+.bg-green-500,
+.bg-green-600,
+.bg-emerald-700 { background-color: var(--ok) !important; }
+.bg-green-50,
+.bg-emerald-50 { background-color: var(--ok-bg) !important; }
+
+.bg-amber-400,
+.bg-amber-500,
+.bg-amber-600 { background-color: var(--warn) !important; }
+.bg-amber-50 { background-color: var(--warn-bg) !important; }
+
+.bg-red-400,
+.bg-red-500,
+.bg-red-600 { background-color: var(--risk) !important; }
+.bg-red-50 { background-color: var(--risk-bg) !important; }
+
+.border-blue-100,
+.border-blue-200,
+.border-blue-300 { border-color: #DCE5F8 !important; }
+.border-green-100,
+.border-emerald-100 { border-color: #DDEDE4 !important; }
+.border-amber-100,
+.border-amber-300 { border-color: #EFE1BF !important; }
+.border-red-100 { border-color: #F0D2D2 !important; }
+
+.shadow-blue-200,
+.shadow-green-200 { --tw-shadow-color: rgba(50, 83, 233, .16) !important; }
+.hover\:bg-blue-700:hover { background-color: var(--blue-d) !important; }
+.hover\:bg-slate-50:hover { background-color: var(--surface) !important; }

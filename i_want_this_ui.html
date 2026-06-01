@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FinPilot Agent · PWA UI</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@latest/dist/web/static/pretendard.css">
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  :root{
+    --blue:#2563EB; --blue-d:#1D4ED8; --blue-l:#3B82F6;
+    --blue-50:#EEF3FF; --blue-100:#DCE6FF; --blue-700:#1E40AF;
+    --logo:#3253E9;
+    --ink:#0F172A; --ink-2:#293548; --muted:#647488; --muted-2:#9AA7B7;
+    --line:#E6EBF2; --line-2:#EEF1F6; --bg:#FFFFFF; --soft:#F6F8FB;
+    --ok:#15803D; --ok-bg:#E6F4EB; --warn:#B45309; --warn-bg:#FBF1DF;
+    --risk:#C0322B; --risk-bg:#FBEAE8;
+  }
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent;}
+  body{
+    font-family:'Pretendard',-apple-system,sans-serif;
+    color:var(--ink);
+    background:
+      radial-gradient(1200px 600px at 15% -5%, #E4ECFb 0%, rgba(228,236,251,0) 55%),
+      radial-gradient(1000px 700px at 100% 10%, #EAF1FC 0%, rgba(234,241,252,0) 50%),
+      linear-gradient(180deg,#EEF2F8 0%, #F5F7FB 100%);
+    min-height:100vh;
+    padding:54px 32px 80px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .icn{display:inline-flex;align-items:center;justify-content:center;line-height:0;}
+  .icn svg{width:18px;height:18px;stroke-width:2;}
+  .icn.sm svg{width:14px;height:14px;}
+  .icn.md svg{width:16px;height:16px;}
+  .icn.lg svg{width:22px;height:22px;}
+  .icn.xl svg{width:26px;height:26px;}
+
+  /* ---------- page header ---------- */
+  .head{max-width:1280px;margin:0 auto 46px;}
+  .brand{display:flex;align-items:center;gap:13px;}
+  .brand .mk{
+    display:flex;align-items:center;justify-content:center;color:var(--logo);
+  }
+  .brand .mk svg{width:62px;height:42px;}
+  .brand h1{font-size:25px;font-weight:800;letter-spacing:-.5px;}
+  .brand .sub{font-size:13.5px;color:var(--muted);font-weight:500;margin-top:3px;}
+  .tagline{margin-top:18px;font-size:15px;color:var(--ink-2);max-width:560px;line-height:1.55;font-weight:450;}
+  .chips{display:flex;gap:8px;margin-top:18px;flex-wrap:wrap;}
+  .chip{
+    font-size:12.5px;font-weight:600;color:var(--blue-700);
+    background:#fff;border:1px solid var(--blue-100);
+    padding:6px 12px;border-radius:999px;display:inline-flex;gap:6px;align-items:center;
+  }
+  .chip .icn svg{width:13px;height:13px;}
+
+  /* ---------- shelf of phones ---------- */
+  .shelf{
+    max-width:1472px;margin:0 auto;
+    display:flex;flex-wrap:wrap;gap:50px 40px;justify-content:center;align-items:flex-start;
+  }
+  .unit{display:flex;flex-direction:column;align-items:center;gap:16px;
+    opacity:0;transform:translateY(16px);animation:rise .7s cubic-bezier(.2,.7,.2,1) forwards;}
+  @keyframes rise{to{opacity:1;transform:none;}}
+  .cap{text-align:center;}
+  .cap .n{font-size:11px;font-weight:700;color:var(--blue);letter-spacing:.5px;}
+  .cap .t{font-size:15px;font-weight:700;margin-top:3px;letter-spacing:-.3px;}
+  .cap .d{font-size:12.5px;color:var(--muted);margin-top:3px;}
+
+  /* ---------- device ---------- */
+  .device{
+    width:336px;border-radius:46px;padding:11px;
+    background:linear-gradient(160deg,#1a2231,#0c111b);
+    box-shadow:0 40px 70px -30px rgba(20,30,55,.5), 0 8px 22px -10px rgba(20,30,55,.35);
+    position:relative;
+  }
+  .screen{
+    position:relative;border-radius:36px;overflow:hidden;background:var(--bg);
+    height:712px;display:flex;flex-direction:column;
+  }
+  .body{flex:1;overflow-y:auto;overscroll-behavior:contain;}
+  .body::-webkit-scrollbar{width:0;}
+  /* status bar */
+  .sbar{display:flex;justify-content:space-between;align-items:center;
+    padding:13px 24px 7px;font-size:13px;font-weight:700;flex-shrink:0;}
+  .sbar.dark{color:#fff;}
+  .sbar .r{display:flex;gap:6px;align-items:center;}
+  .sbar .r svg{width:16px;height:16px;}
+  .notch{position:absolute;top:0;left:50%;transform:translateX(-50%);
+    width:128px;height:26px;background:#0c111b;border-radius:0 0 16px 16px;z-index:30;}
+
+  /* generic */
+  .pad{padding:0 22px;}
+  .divline{height:1px;background:var(--line);margin:0 22px;}
+  .divfull{height:7px;background:var(--soft);border-top:1px solid var(--line-2);border-bottom:1px solid var(--line-2);}
+  .sechead{display:flex;align-items:center;justify-content:space-between;padding:20px 22px 11px;}
+  .sechead .l{display:flex;align-items:center;gap:8px;}
+  .sechead .ttl{font-size:13.5px;font-weight:800;letter-spacing:-.2px;}
+  .sechead .ttl::before{content:"";display:inline-block;width:3px;height:13px;background:var(--blue);
+    border-radius:2px;margin-right:9px;vertical-align:-1px;}
+  .sechead .more{font-size:12px;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:2px;}
+  .muted{color:var(--muted);}
+  .num{font-variant-numeric:tabular-nums;letter-spacing:-.5px;}
+
+  /* appbar */
+  .appbar{display:flex;align-items:center;justify-content:space-between;padding:8px 18px 14px;flex-shrink:0;}
+  .appbar .back{width:34px;height:34px;display:flex;align-items:center;justify-content:center;
+    color:var(--ink-2);}
+  .appbar .at{font-size:16px;font-weight:800;letter-spacing:-.3px;}
+  .iconbtn{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+    color:var(--ink-2);position:relative;}
+  .iconbtn .dot{position:absolute;top:7px;right:8px;width:7px;height:7px;border-radius:50%;
+    background:var(--risk);border:1.5px solid #fff;}
+
+  /* buttons */
+  .btn{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;
+    padding:15px;border-radius:14px;border:none;font-family:inherit;font-size:15px;font-weight:700;
+    cursor:pointer;letter-spacing:-.2px;}
+  .btn.pri{background:var(--blue);color:#fff;box-shadow:0 12px 22px -10px rgba(37,99,235,.6);}
+  .btn.ghost{background:#fff;color:var(--blue);border:1.5px solid var(--blue-100);}
+  .btn.soft{background:var(--soft);color:var(--ink-2);}
+  .footbtn{padding:14px 22px 22px;flex-shrink:0;background:linear-gradient(180deg,rgba(255,255,255,0),#fff 30%);}
+
+  /* tabbar */
+  .tabbar{display:flex;justify-content:space-around;align-items:center;padding:9px 8px 13px;
+    border-top:1px solid var(--line);flex-shrink:0;background:#fff;}
+  .tab{display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--muted-2);font-size:10.5px;font-weight:600;}
+  .tab svg{width:21px;height:21px;}
+  .tab.on{color:var(--blue);}
+
+  /* pills / tags */
+  .pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;
+    padding:4px 9px;border-radius:7px;letter-spacing:-.1px;}
+  .pill.b{background:var(--blue-50);color:var(--blue-d);}
+  .pill.ok{background:var(--ok-bg);color:var(--ok);}
+  .pill.warn{background:var(--warn-bg);color:var(--warn);}
+  .pill.risk{background:var(--risk-bg);color:var(--risk);}
+  .pill .icn svg{width:12px;height:12px;}
+
+  /* ====== ONBOARDING ====== */
+  .ob-logo{display:flex;flex-direction:row;align-items:center;justify-content:center;gap:14px;padding:34px 0 14px;}
+  .ob-logo .mk{display:flex;align-items:center;justify-content:center;color:var(--logo);}
+  .ob-logo .mk svg{width:62px;height:42px;}
+  .ob-logo .wm{font-size:31px;font-weight:800;letter-spacing:-1.2px;color:var(--ink);}
+  .h2{font-size:21px;font-weight:800;line-height:1.32;letter-spacing:-.5px;}
+  .lead{font-size:14px;color:var(--muted);margin-top:8px;line-height:1.5;}
+  .field{padding:16px 0;border-bottom:1px solid var(--line-2);}
+  .field:last-child{border-bottom:none;}
+  .field .lab{font-size:12.5px;font-weight:700;color:var(--ink-2);display:flex;align-items:center;gap:7px;}
+  .field .lab .icn{color:var(--blue);}
+  .field .val{display:flex;align-items:center;justify-content:space-between;margin-top:11px;}
+  .field .val .v{font-size:16px;font-weight:600;}
+  .field .val .v.ph{color:var(--muted-2);font-weight:500;}
+  .selchips{display:flex;gap:7px;flex-wrap:wrap;margin-top:11px;}
+  .selchip{font-size:13px;font-weight:600;padding:8px 13px;border-radius:10px;border:1.5px solid var(--line);color:var(--muted);}
+  .selchip.on{border-color:var(--blue);color:var(--blue-d);background:var(--blue-50);}
+  .steps{display:flex;gap:6px;justify-content:center;padding:4px 0 2px;}
+  .steps i{width:7px;height:7px;border-radius:50%;background:var(--line);display:block;}
+  .steps i.on{width:22px;border-radius:5px;background:var(--blue);}
+
+  /* ====== UPLOAD ====== */
+  .uprow{display:flex;align-items:center;gap:13px;padding:15px 0;border-bottom:1px solid var(--line-2);}
+  .uprow .ic{width:42px;height:42px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .uprow .ic.ok{background:var(--ok-bg);color:var(--ok);}
+  .uprow .ic.wait{background:var(--blue-50);color:var(--blue);}
+  .uprow .tx{flex:1;}
+  .uprow .tx .a{font-size:14px;font-weight:700;}
+  .uprow .tx .b{font-size:12px;color:var(--muted);margin-top:2px;}
+  .dropzone{border:1.6px dashed var(--blue-100);border-radius:14px;padding:24px;text-align:center;
+    background:var(--blue-50);margin-top:6px;}
+  .dropzone .icn{color:var(--blue);}
+  .dropzone .t{font-size:13.5px;font-weight:700;margin-top:9px;}
+  .dropzone .s{font-size:12px;color:var(--muted);margin-top:4px;}
+  .samplelink{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:18px;
+    font-size:13px;font-weight:700;color:var(--blue);}
+
+  /* ====== DASHBOARD ====== */
+  .greet{padding:2px 22px 4px;}
+  .greet .hi{font-size:13px;color:var(--muted);font-weight:500;}
+  .greet .store{display:flex;align-items:center;gap:8px;margin-top:3px;}
+  .greet .store .nm{font-size:20px;font-weight:800;letter-spacing:-.4px;}
+  .greet .store .loc{font-size:11.5px;font-weight:600;color:var(--blue-d);background:var(--blue-50);
+    padding:3px 8px;border-radius:7px;display:inline-flex;align-items:center;gap:4px;}
+  .greet .store .loc svg{width:11px;height:11px;}
+
+  .hero{display:flex;align-items:center;gap:18px;padding:18px 22px 8px;}
+  .gauge{position:relative;width:104px;height:104px;flex-shrink:0;}
+  .gauge .lab{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+  .gauge .lab .v{font-size:30px;font-weight:800;letter-spacing:-1px;line-height:1;}
+  .gauge .lab .s{font-size:10.5px;color:var(--muted);margin-top:3px;font-weight:600;}
+  .hero .txt .st{font-size:15px;font-weight:800;letter-spacing:-.3px;}
+  .hero .txt .ds{font-size:13px;color:var(--muted);margin-top:7px;line-height:1.5;}
+
+  .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);
+    border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin-top:14px;}
+  .tile{background:#fff;padding:15px 12px;text-align:left;}
+  .tile .tl{font-size:11px;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:5px;}
+  .tile .tl svg{width:13px;height:13px;}
+  .tile .vv{font-size:18px;font-weight:800;margin-top:9px;letter-spacing:-.4px;}
+  .tile .vv.risk{color:var(--risk);}
+  .tile .vv.warn{color:var(--warn);}
+  .tile .vv.blue{color:var(--blue-d);}
+
+  .cashbox{padding:18px 22px 6px;}
+  .cashbox .row{display:flex;align-items:flex-end;justify-content:space-between;}
+  .cashbox .lbl{font-size:12.5px;color:var(--muted);font-weight:600;}
+  .cashbox .big{font-size:34px;font-weight:800;letter-spacing:-1.5px;line-height:1;}
+  .cashbox .big b{color:var(--risk);}
+  .cashbox .unit2{font-size:14px;font-weight:700;color:var(--ink-2);margin-left:2px;}
+  .spark{margin-top:14px;}
+
+  .callout{display:flex;align-items:center;gap:12px;margin:16px 22px 4px;padding:14px 15px;
+    background:var(--blue-50);border-left:3px solid var(--blue);border-radius:0 11px 11px 0;}
+  .callout .icn{color:var(--blue);flex-shrink:0;}
+  .callout .ct{flex:1;font-size:13px;font-weight:600;line-height:1.45;color:var(--ink-2);}
+  .callout .ct b{font-weight:800;color:var(--blue-d);}
+
+  /* ====== CAUSE ANALYSIS ====== */
+  .leadblock{padding:6px 22px 4px;}
+  .leadblock .big{font-size:19px;font-weight:800;line-height:1.4;letter-spacing:-.4px;}
+  .leadblock .big em{font-style:normal;color:var(--risk);}
+  .leadblock .sm{font-size:12.5px;color:var(--muted);margin-top:8px;}
+  .cause{padding:14px 22px;border-bottom:1px solid var(--line-2);}
+  .cause .top{display:flex;align-items:center;justify-content:space-between;}
+  .cause .top .nm{font-size:13.5px;font-weight:700;display:flex;align-items:center;gap:8px;}
+  .cause .top .nm .icn{color:var(--muted);}
+  .cause .top .pc{font-size:15px;font-weight:800;color:var(--ink);}
+  .bar{height:8px;border-radius:5px;background:var(--line-2);margin-top:11px;overflow:hidden;}
+  .bar i{display:block;height:100%;border-radius:5px;background:linear-gradient(90deg,var(--blue-l),var(--blue));}
+  .cause .ft{display:flex;align-items:center;gap:6px;margin-top:9px;}
+  .sources{padding:14px 22px 4px;}
+  .src{display:flex;align-items:center;gap:9px;padding:9px 0;font-size:12.5px;color:var(--ink-2);}
+  .src .icn{color:var(--blue);}
+  .src .tag{margin-left:auto;font-size:11px;color:var(--muted);font-weight:600;}
+
+  /* ====== STRATEGY CARDS ====== */
+  .scard{display:flex;gap:13px;padding:16px 16px;border:1px solid var(--line);border-radius:14px;
+    margin:0 22px 12px;position:relative;}
+  .scard::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:4px;border-radius:0 4px 4px 0;}
+  .scard.op::before{background:var(--blue);}
+  .scard.mk::before{background:var(--ok);}
+  .scard.fi::before{background:var(--warn);}
+  .scard .si{width:40px;height:40px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:6px;}
+  .scard.op .si{background:var(--blue-50);color:var(--blue);}
+  .scard.mk .si{background:var(--ok-bg);color:var(--ok);}
+  .scard.fi .si{background:var(--warn-bg);color:var(--warn);}
+  .scard .mid{flex:1;}
+  .scard .mid .tg{font-size:10.5px;font-weight:800;letter-spacing:.3px;}
+  .scard.op .mid .tg{color:var(--blue);}
+  .scard.mk .mid .tg{color:var(--ok);}
+  .scard.fi .mid .tg{color:var(--warn);}
+  .scard .mid .ti{font-size:14.5px;font-weight:700;margin-top:3px;letter-spacing:-.3px;}
+  .scard .mid .ef{font-size:12px;color:var(--muted);margin-top:6px;display:flex;align-items:center;gap:5px;}
+  .scard .mid .ef b{color:var(--ok);font-weight:800;}
+  .scard .chk{width:24px;height:24px;border-radius:7px;border:2px solid var(--blue);background:var(--blue);
+    color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;align-self:flex-start;}
+  .scard .chk.off{border-color:var(--line);background:#fff;}
+  .scard .chk svg{width:14px;height:14px;}
+
+  /* ====== SIMULATION ====== */
+  .simhead{display:flex;align-items:center;justify-content:center;gap:16px;padding:14px 22px 6px;}
+  .simhead .col{text-align:center;}
+  .simhead .col .l{font-size:11px;color:var(--muted);font-weight:600;}
+  .simhead .col .n{font-size:26px;font-weight:800;letter-spacing:-1px;margin-top:5px;}
+  .simhead .col .n.now{color:var(--muted-2);}
+  .simhead .col .n.aft{color:var(--ok);}
+  .simhead .arrow{color:var(--ok);}
+  .simhead .arrow svg{width:24px;height:24px;}
+  .gain{text-align:center;font-size:13px;font-weight:700;color:var(--ok);margin-top:2px;}
+  .chartwrap{padding:8px 16px 4px;}
+  .legend{display:flex;gap:18px;justify-content:center;padding:6px 0 2px;font-size:11.5px;font-weight:600;color:var(--muted);}
+  .legend i{display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:5px;vertical-align:2px;}
+  .simrow{display:flex;align-items:center;justify-content:space-between;padding:13px 22px;border-bottom:1px solid var(--line-2);}
+  .simrow .k{font-size:13px;color:var(--ink-2);font-weight:600;display:flex;align-items:center;gap:8px;}
+  .simrow .k .icn{color:var(--muted);}
+  .simrow .vchg{font-size:13px;font-weight:700;display:flex;align-items:center;gap:7px;}
+  .simrow .vchg .was{color:var(--muted-2);text-decoration:line-through;font-size:12px;}
+
+  /* ====== REPORT ====== */
+  .paper{margin:8px 22px 0;border:1px solid var(--line);border-radius:12px;overflow:hidden;
+    box-shadow:0 18px 30px -22px rgba(30,40,70,.4);}
+  .paper .ph{background:linear-gradient(135deg,var(--blue),var(--blue-d));color:#fff;padding:16px 17px;}
+  .paper .ph .lg{font-size:10.5px;font-weight:700;opacity:.85;letter-spacing:.4px;display:flex;align-items:center;gap:6px;}
+  .paper .ph .lg svg{width:13px;height:13px;}
+  .paper .ph .tt{font-size:16px;font-weight:800;margin-top:8px;letter-spacing:-.3px;}
+  .paper .ph .dt{font-size:11.5px;opacity:.85;margin-top:5px;}
+  .toc{padding:4px 16px 8px;}
+  .tocrow{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--line-2);}
+  .tocrow:last-child{border-bottom:none;}
+  .tocrow .nx{width:22px;height:22px;border-radius:7px;background:var(--blue-50);color:var(--blue-d);
+    display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;}
+  .tocrow .nm{flex:1;font-size:13px;font-weight:600;}
+  .tocrow .icn{color:var(--muted-2);}
+  .qbox{padding:16px 22px 4px;}
+  .qbox .qt{font-size:12.5px;font-weight:800;color:var(--ink-2);margin-bottom:11px;display:flex;align-items:center;gap:7px;}
+  .qbox .qt .icn{color:var(--blue);}
+  .q{display:flex;gap:9px;font-size:13px;line-height:1.5;color:var(--ink-2);padding:6px 0;}
+  .q .icn{color:var(--blue);flex-shrink:0;margin-top:2px;}
+  .readybar{display:flex;align-items:center;justify-content:space-between;margin:14px 22px 0;
+    padding:13px 15px;background:var(--ok-bg);border-radius:11px;}
+  .readybar .l{font-size:12.5px;font-weight:700;color:var(--ok);display:flex;align-items:center;gap:8px;}
+  .readybar .v{font-size:15px;font-weight:800;color:var(--ok);}
+
+  .twobtn{display:flex;gap:10px;}
+
+  /* ====== LOGO MARK ====== */
+  .fpm{display:block;}
+
+  /* ====== FINANCE CONNECT ====== */
+  .finrow{display:flex;gap:13px;padding:15px 22px;border-bottom:1px solid var(--line-2);}
+  .finrow .fi{width:40px;height:40px;border-radius:11px;background:var(--blue-50);color:var(--blue);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;}
+  .finrow .fi svg{width:19px;height:19px;}
+  .finrow .fm{flex:1;}
+  .finrow .ttl2{font-size:14px;font-weight:700;letter-spacing:-.3px;display:flex;align-items:center;gap:8px;}
+  .finrow .rs{font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.45;}
+  .finrow .fitline{display:flex;align-items:center;gap:10px;margin-top:11px;}
+  .finrow .fitbar{flex:1;height:6px;border-radius:4px;background:var(--line-2);overflow:hidden;}
+  .finrow .fitbar i{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,var(--blue-l),var(--blue));}
+  .finrow .fitpc{font-size:12px;font-weight:800;color:var(--blue-d);}
+  .finrow .prov{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted-2);font-weight:600;margin-top:9px;}
+  .finrow .prov svg{width:12px;height:12px;}
+  .jbnote{display:flex;gap:9px;align-items:flex-start;margin:14px 22px 0;padding:13px 14px;
+    background:var(--soft);border-radius:11px;font-size:11.5px;line-height:1.5;color:var(--muted);font-weight:500;}
+  .jbnote .icn{color:var(--muted-2);flex-shrink:0;margin-top:1px;}
+</style>
+</head>
+<body>
+
+  <div class="head">
+    <div class="brand">
+      <div class="mk"><svg class="fpm" viewBox="30 100 870 590" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M 420.50 437.50 Q 421.00 435.00 416.00 434.50 Q 411.00 434.00 365.00 440.00 Q 319.00 446.00 308.00 448.50 Q 297.00 451.00 271.00 459.50 Q 245.00 468.00 236.00 472.00 Q 227.00 476.00 213.50 484.00 Q 200.00 492.00 183.00 506.50 Q 166.00 521.00 105.00 594.00 Q 44.00 667.00 44.00 669.00 Q 44.00 671.00 109.50 671.00 Q 175.00 671.00 192.50 668.00 Q 210.00 665.00 220.50 661.50 Q 231.00 658.00 243.50 652.00 Q 256.00 646.00 272.00 634.50 Q 288.00 623.00 303.50 606.50 Q 319.00 590.00 346.50 551.50 Q 374.00 513.00 397.00 476.50 Q 420.00 440.00 420.50 437.50 Z" fill="currentColor"/><path d="M 777.50 215.00 Q 780.00 207.00 779.00 206.00 Q 778.00 205.00 765.00 214.00 Q 752.00 223.00 735.00 232.50 Q 718.00 242.00 705.50 247.50 Q 693.00 253.00 673.50 259.50 Q 654.00 266.00 617.50 274.00 Q 581.00 282.00 506.50 292.00 Q 432.00 302.00 409.00 307.50 Q 386.00 313.00 372.00 318.00 Q 358.00 323.00 337.00 334.00 Q 316.00 345.00 296.50 359.50 Q 277.00 374.00 259.50 391.50 Q 242.00 409.00 231.50 422.00 Q 221.00 435.00 216.50 442.50 Q 212.00 450.00 214.00 451.00 Q 216.00 452.00 239.50 441.50 Q 263.00 431.00 284.00 425.00 Q 305.00 419.00 328.50 414.50 Q 352.00 410.00 408.00 402.50 Q 464.00 395.00 496.50 389.50 Q 529.00 384.00 563.50 376.00 Q 598.00 368.00 620.50 360.00 Q 643.00 352.00 656.00 345.50 Q 669.00 339.00 680.50 331.50 Q 692.00 324.00 709.00 309.50 Q 726.00 295.00 734.00 286.00 Q 742.00 277.00 752.50 262.00 Q 763.00 247.00 769.00 235.00 Q 775.00 223.00 777.50 215.00 Z" fill="currentColor"/><path d="M 726.50 341.50 Q 731.00 327.00 728.00 327.00 Q 725.00 327.00 715.00 336.00 Q 705.00 345.00 686.50 357.50 Q 668.00 370.00 650.00 379.00 Q 632.00 388.00 609.00 397.00 Q 586.00 406.00 577.00 410.50 Q 568.00 415.00 559.50 420.50 Q 551.00 426.00 545.00 431.00 Q 539.00 436.00 529.00 446.50 Q 519.00 457.00 511.00 468.00 Q 503.00 479.00 455.00 550.50 Q 407.00 622.00 406.50 624.50 Q 406.00 627.00 420.50 627.00 Q 435.00 627.00 449.50 625.50 Q 464.00 624.00 483.50 619.50 Q 503.00 615.00 514.00 611.50 Q 525.00 608.00 546.50 598.00 Q 568.00 588.00 580.50 579.50 Q 593.00 571.00 601.00 564.00 Q 609.00 557.00 620.50 544.50 Q 632.00 532.00 643.50 515.00 Q 655.00 498.00 665.00 480.50 Q 675.00 463.00 689.50 432.50 Q 704.00 402.00 713.00 379.00 Q 722.00 356.00 726.50 341.50 Z" fill="currentColor"/><circle cx="842.39" cy="157.99" r="45.16" fill="currentColor"/></svg></div>
+      <div>
+        <h1>FinPilot Agent</h1>
+        <div class="sub">소상공인의 금융 운영을 설계하는 AI CFO · JB금융그룹 Fin:AI Challenge</div>
+      </div>
+    </div>
+    <p class="tagline">매출·비용·현금흐름·상권·날씨를 함께 읽어 사업 상태를 진단하고, 실행 가능한 금융 운영 전략과 상담 준비 리포트까지 연결하는 모바일 PWA입니다.</p>
+    <div class="chips">
+      <span class="chip"><span class="icn"><i data-lucide="smartphone"></i></span>PWA · 홈 화면 설치</span>
+      <span class="chip"><span class="icn"><i data-lucide="activity"></i></span>실시간 사업 상태 진단</span>
+      <span class="chip"><span class="icn"><i data-lucide="shield-check"></i></span>위험 문구 검증</span>
+    </div>
+  </div>
+
+  <div class="shelf">
+
+    <!-- ============ 1. ONBOARDING ============ -->
+    <div class="unit" style="animation-delay:.02s">
+      <div class="device"><div class="screen">
+        <div class="notch"></div>
+        <div class="sbar"><span class="num">9:41</span><span class="r"><i data-lucide="signal"></i><i data-lucide="wifi"></i><i data-lucide="battery-full"></i></span></div>
+        <div class="body">
+          <div class="ob-logo">
+            <div class="mk"><svg class="fpm" viewBox="30 100 870 590" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M 420.50 437.50 Q 421.00 435.00 416.00 434.50 Q 411.00 434.00 365.00 440.00 Q 319.00 446.00 308.00 448.50 Q 297.00 451.00 271.00 459.50 Q 245.00 468.00 236.00 472.00 Q 227.00 476.00 213.50 484.00 Q 200.00 492.00 183.00 506.50 Q 166.00 521.00 105.00 594.00 Q 44.00 667.00 44.00 669.00 Q 44.00 671.00 109.50 671.00 Q 175.00 671.00 192.50 668.00 Q 210.00 665.00 220.50 661.50 Q 231.00 658.00 243.50 652.00 Q 256.00 646.00 272.00 634.50 Q 288.00 623.00 303.50 606.50 Q 319.00 590.00 346.50 551.50 Q 374.00 513.00 397.00 476.50 Q 420.00 440.00 420.50 437.50 Z" fill="currentColor"/><path d="M 777.50 215.00 Q 780.00 207.00 779.00 206.00 Q 778.00 205.00 765.00 214.00 Q 752.00 223.00 735.00 232.50 Q 718.00 242.00 705.50 247.50 Q 693.00 253.00 673.50 259.50 Q 654.00 266.00 617.50 274.00 Q 581.00 282.00 506.50 292.00 Q 432.00 302.00 409.00 307.50 Q 386.00 313.00 372.00 318.00 Q 358.00 323.00 337.00 334.00 Q 316.00 345.00 296.50 359.50 Q 277.00 374.00 259.50 391.50 Q 242.00 409.00 231.50 422.00 Q 221.00 435.00 216.50 442.50 Q 212.00 450.00 214.00 451.00 Q 216.00 452.00 239.50 441.50 Q 263.00 431.00 284.00 425.00 Q 305.00 419.00 328.50 414.50 Q 352.00 410.00 408.00 402.50 Q 464.00 395.00 496.50 389.50 Q 529.00 384.00 563.50 376.00 Q 598.00 368.00 620.50 360.00 Q 643.00 352.00 656.00 345.50 Q 669.00 339.00 680.50 331.50 Q 692.00 324.00 709.00 309.50 Q 726.00 295.00 734.00 286.00 Q 742.00 277.00 752.50 262.00 Q 763.00 247.00 769.00 235.00 Q 775.00 223.00 777.50 215.00 Z" fill="currentColor"/><path d="M 726.50 341.50 Q 731.00 327.00 728.00 327.00 Q 725.00 327.00 715.00 336.00 Q 705.00 345.00 686.50 357.50 Q 668.00 370.00 650.00 379.00 Q 632.00 388.00 609.00 397.00 Q 586.00 406.00 577.00 410.50 Q 568.00 415.00 559.50 420.50 Q 551.00 426.00 545.00 431.00 Q 539.00 436.00 529.00 446.50 Q 519.00 457.00 511.00 468.00 Q 503.00 479.00 455.00 550.50 Q 407.00 622.00 406.50 624.50 Q 406.00 627.00 420.50 627.00 Q 435.00 627.00 449.50 625.50 Q 464.00 624.00 483.50 619.50 Q 503.00 615.00 514.00 611.50 Q 525.00 608.00 546.50 598.00 Q 568.00 588.00 580.50 579.50 Q 593.00 571.00 601.00 564.00 Q 609.00 557.00 620.50 544.50 Q 632.00 532.00 643.50 515.00 Q 655.00 498.00 665.00 480.50 Q 675.00 463.00 689.50 432.50 Q 704.00 402.00 713.00 379.00 Q 722.00 356.00 726.50 341.50 Z" fill="currentColor"/><circle cx="842.39" cy="157.99" r="45.16" fill="currentColor"/></svg></div>
+            <div class="wm">FinPilot</div>
+          </div>
+          <div class="pad" style="padding-top:14px;">
+            <div class="h2">사업 정보를<br>알려주세요</div>
+            <div class="lead">입력한 정보로 상권·날씨 데이터를 결합해<br>현재 사업 상태를 진단합니다.</div>
+
+            <div class="field">
+              <div class="lab"><span class="icn sm"><i data-lucide="store"></i></span>업종</div>
+              <div class="selchips">
+                <span class="selchip on">카페</span>
+                <span class="selchip">음식점</span>
+                <span class="selchip">제과</span>
+                <span class="selchip">미용</span>
+              </div>
+            </div>
+            <div class="field">
+              <div class="lab"><span class="icn sm"><i data-lucide="map-pin"></i></span>지역</div>
+              <div class="val"><span class="v">전주시 완산구 효자동</span><span class="icn" style="color:var(--muted-2)"><i data-lucide="chevron-right"></i></span></div>
+            </div>
+            <div class="field">
+              <div class="lab"><span class="icn sm"><i data-lucide="calendar"></i></span>영업 기간</div>
+              <div class="val"><span class="v">1년 6개월</span><span class="icn" style="color:var(--muted-2)"><i data-lucide="chevron-right"></i></span></div>
+            </div>
+            <div class="field">
+              <div class="lab"><span class="icn sm"><i data-lucide="wallet"></i></span>월평균 매출</div>
+              <div class="val"><span class="v num">₩ 12,400,000</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="footbtn">
+          <div class="steps" style="margin-bottom:14px;"><i class="on"></i><i></i><i></i></div>
+          <button class="btn pri">다음<span class="icn"><i data-lucide="arrow-right"></i></span></button>
+        </div>
+      </div></div>
+      <div class="cap"><div class="n">STEP 01</div><div class="t">온보딩</div><div class="d">업종·지역·매출 입력</div></div>
+    </div>
+
+    <!-- ============ 2. UPLOAD ============ -->
+    <div class="unit" style="animation-delay:.1s">
+      <div class="device"><div class="screen">
+        <div class="notch"></div>
+        <div class="sbar"><span class="num">9:41</span><span class="r"><i data-lucide="signal"></i><i data-lucide="wifi"></i><i data-lucide="battery-full"></i></span></div>
+        <div class="appbar">
+          <div class="back"><i data-lucide="arrow-left"></i></div>
+          <div class="at">데이터 등록</div>
+          <div style="width:34px"></div>
+        </div>
+        <div class="body">
+          <div class="pad">
+            <div class="h2" style="font-size:19px;">매출·비용 데이터를<br>올려주세요</div>
+            <div class="lead" style="margin-top:6px;">CSV 파일을 올리면 시간대별 흐름까지 분석합니다.</div>
+
+            <div style="margin-top:16px;">
+              <div class="uprow">
+                <div class="ic ok"><span class="icn"><i data-lucide="check"></i></span></div>
+                <div class="tx">
+                  <div class="a">매출 데이터</div>
+                  <div class="b num">sales_2026.csv · 92일치 · 8,412행</div>
+                </div>
+                <span class="pill ok"><span class="icn"><i data-lucide="check-circle-2"></i></span>완료</span>
+              </div>
+            </div>
+
+            <div style="margin-top:8px;">
+              <div class="uprow" style="border-bottom:none;">
+                <div class="ic wait"><span class="icn"><i data-lucide="upload"></i></span></div>
+                <div class="tx">
+                  <div class="a">비용 데이터</div>
+                  <div class="b">고정비 · 변동비 CSV</div>
+                </div>
+              </div>
+              <div class="dropzone">
+                <span class="icn xl"><i data-lucide="file-up"></i></span>
+                <div class="t">비용 CSV 끌어다 놓기</div>
+                <div class="s">또는 파일 선택 · 최대 10MB</div>
+              </div>
+            </div>
+
+            <div class="samplelink"><span class="icn md"><i data-lucide="sparkles"></i></span>샘플 데이터로 먼저 체험하기</div>
+          </div>
+        </div>
+        <div class="footbtn">
+          <div class="steps" style="margin-bottom:14px;"><i></i><i class="on"></i><i></i></div>
+          <button class="btn pri">진단 시작<span class="icn"><i data-lucide="play"></i></span></button>
+        </div>
+      </div></div>
+      <div class="cap"><div class="n">STEP 02</div><div class="t">데이터 등록</div><div class="d">매출·비용 CSV 업로드</div></div>
+    </div>
+
+    <!-- ============ 3. DASHBOARD ============ -->
+    <div class="unit" style="animation-delay:.18s">
+      <div class="device"><div class="screen">
+        <div class="notch"></div>
+        <div class="sbar"><span class="num">9:41</span><span class="r"><i data-lucide="signal"></i><i data-lucide="wifi"></i><i data-lucide="battery-full"></i></span></div>
+        <div class="appbar">
+          <div style="width:34px"></div>
+          <div class="at">사업 상태</div>
+          <div class="iconbtn"><i data-lucide="bell"></i><span class="dot"></span></div>
+        </div>
+        <div class="body">
+          <div class="greet">
+            <div class="hi">5월 29일 금요일 · 최신 진단</div>
+            <div class="store">
+              <span class="nm">봄날 카페</span>
+              <span class="loc"><i data-lucide="map-pin"></i>전주 효자동</span>
+            </div>
+          </div>
+
+          <div class="hero">
+            <div class="gauge">
+              <svg viewBox="0 0 120 120" width="104" height="104">
+                <circle cx="60" cy="60" r="50" fill="none" stroke="#EEF1F6" stroke-width="11"/>
+                <circle cx="60" cy="60" r="50" fill="none" stroke="#2563EB" stroke-width="11"
+                  stroke-linecap="round" stroke-dasharray="314.16"
+                  stroke-dashoffset="119.4" transform="rotate(-90 60 60)"/>
+              </svg>
+              <div class="lab"><div class="v num">62</div><div class="s">사업 건강도</div></div>
+            </div>
+            <div class="txt">
+              <div class="st">주의가 필요한 단계</div>
+              <div class="ds">최근 3주간 매출이 흔들리고 있어요. 지금 점검하면 충분히 회복 가능한 구간입니다.</div>
+            </div>
+          </div>
+
+          <div class="tiles">
+            <div class="tile">
+              <div class="tl"><i data-lucide="droplet"></i>유동성</div>
+              <div class="vv risk">높음</div>
+            </div>
+            <div class="tile">
+              <div class="tl"><i data-lucide="trending-down"></i>비용 압박</div>
+              <div class="vv warn">중간</div>
+            </div>
+            <div class="tile">
+              <div class="tl"><i data-lucide="landmark"></i>금융 준비</div>
+              <div class="vv blue num">58%</div>
+            </div>
+          </div>
+
+          <div class="sechead"><div class="ttl">현금흐름 전망</div></div>
+          <div class="cashbox">
+            <div class="row">
+              <div>
+                <div class="lbl">현재 구조 유지 시</div>
+                <div class="big"><b class="num">17</b><span class="unit2">일 후</span></div>
+              </div>
+              <span class="pill risk"><span class="icn"><i data-lucide="alert-triangle"></i></span>유동성 압박</span>
+            </div>
+            <div class="spark">
+              <svg viewBox="0 0 290 64" width="100%" height="56" preserveAspectRatio="none">
+                <defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="#2563EB" stop-opacity=".18"/>
+                  <stop offset="1" stop-color="#2563EB" stop-opacity="0"/>
+                </linearGradient></defs>
+                <path d="M0,14 L40,18 L80,16 L120,26 L160,30 L200,40 L240,50 L290,60 L290,64 L0,64 Z" fill="url(#sg)"/>
+                <path d="M0,14 L40,18 L80,16 L120,26 L160,30 L200,40 L240,50 L290,60" fill="none" stroke="#2563EB" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="290" cy="60" r="3.6" fill="#C0322B"/>
+              </svg>
+            </div>
+          </div>
+
+          <div class="callout">
+            <span class="icn"><i data-lucide="search"></i></span>
+            <div class="ct">매출 하락이 <b>평일 오후 시간대</b>에 집중되어 있어요. 원인을 확인해 보세요.</div>
+            <span class="icn" style="color:var(--blue)"><i data-lucide="chevron-right"></i></span>
+          </div>
+          <div style="height:14px"></div>
+        </div>
+        <div class="tabbar">
+          <div class="tab on"><i data-lucide="layout-dashboard"></i>홈</div>
+          <div class="tab"><i data-lucide="stethoscope"></i>진단</div>
+          <div class="tab"><i data-lucide="target"></i>전략</div>
+          <div class="tab"><i data-lucide="file-text"></i>리포트</div>
+          <div class="tab"><i data-lucide="user"></i>내정보</div>
+        </div>
+      </div></div>
+      <div class="cap"><div class="n">STEP 03</div><div class="t">사업 상태 대시보드</div><div class="d">건강도·유동성·금융 준비도</div></div>
+    </div>
+
+    <!-- ============ 4. CAUSE ANALYSIS ============ -->
+    <div class="unit" style="animation-delay:.26s">
+      <div class="device"><div class="screen">
+        <div class="notch"></div>
+        <div class="sbar"><span class="num">9:41</span><span class="r"><i data-lucide="signal"></i><i data-lucide="wifi"></i><i data-lucide="battery-full"></i></span></div>
+        <div class="appbar">
+          <div class="back"><i data-lucide="arrow-left"></i></div>
+          <div class="at">원인 분석</div>
+          <div class="iconbtn"><i data-lucide="info"></i></div>
+        </div>
+        <div class="body">
+          <div class="leadblock">
+            <div class="big">최근 3주간 매출이<br><em>14% 감소</em>했어요.</div>
+            <div class="sm">하락에 영향을 준 요인을 기여도순으로 분해했습니다.</div>
+          </div>
+
+          <div style="height:10px"></div>
+
+          <div class="cause">
+            <div class="top">
+              <div class="nm"><span class="icn md"><i data-lucide="clock"></i></span>평일 오후 수요 감소</div>
+              <div class="pc num">42%</div>
+            </div>
+            <div class="bar"><i style="width:42%"></i></div>
+            <div class="ft"><span class="pill b">14–17시 집중</span><span class="pill ok"><span class="icn"><i data-lucide="check"></i></span>신뢰도 높음</span></div>
+          </div>
+
+          <div class="cause">
+            <div class="top">
+              <div class="nm"><span class="icn md"><i data-lucide="store"></i></span>경쟁 점포 증가</div>
+              <div class="pc num">27%</div>
+            </div>
+            <div class="bar"><i style="width:27%"></i></div>
+            <div class="ft"><span class="pill b">반경 500m +3개</span><span class="pill ok"><span class="icn"><i data-lucide="check"></i></span>신뢰도 높음</span></div>
+          </div>
+
+          <div class="cause">
+            <div class="top">
+              <div class="nm"><span class="icn md"><i data-lucide="package"></i></span>원재료 비용 상승</div>
+              <div class="pc num">19%</div>
+            </div>
+            <div class="bar"><i style="width:19%"></i></div>
+            <div class="ft"><span class="pill warn">변동비 +8%</span><span class="pill warn">신뢰도 중간</span></div>
+          </div>
+
+          <div class="cause" style="border-bottom:none;">
+            <div class="top">
+              <div class="nm"><span class="icn md"><i data-lucide="cloud-rain"></i></span>강수일 증가</div>
+              <div class="pc num">12%</div>
+            </div>
+            <div class="bar"><i style="width:12%"></i></div>
+            <div class="ft"><span class="pill b">최근 강수 9일</span><span class="pill warn">신뢰도 중간</span></div>
+          </div>
+
+          <div class="divfull"></div>
+          <div class="sechead"><div class="ttl">분석 근거 데이터</div></div>
+          <div class="sources">
+            <div class="src"><span class="icn md"><i data-lucide="bar-chart-3"></i></span>업로드 매출·비용 데이터<span class="tag">92일</span></div>
+            <div class="src" style="border-top:1px solid var(--line-2)"><span class="icn md"><i data-lucide="map"></i></span>소상공인 상가정보 API<span class="tag">반경 500m</span></div>
+            <div class="src" style="border-top:1px solid var(--line-2)"><span class="icn md"><i data-lucide="cloud-sun"></i></span>기상청 단기예보<span class="tag">3주</span></div>
+          </div>
+          <div style="height:18px"></div>
+        </div>
+      </div></div>
+      <div class="cap"><div class="n">STEP 04</div><div class="t">원인 분석 리포트</div><div class="d">기여도 · 신뢰도 분해</div></div>
+    </div>
+
+    <!-- ============ 5. STRATEGY ============ -->
+    <div class="unit" style="animation-delay:.34s">
+      <div class="device"><div class="screen">
+        <div class="notch"></div>
+        <div class="sbar"><span class="num">9:41</span><span class="r"><i data-lucide="signal"></i><i data-lucide="wifi"></i><i data-lucide="battery-full"></i></span></div>
+        <div class="appbar">
+          <div class="back"><i data-lucide="arrow-left"></i></div>
+          <div class="at">추천 전략</div>
+          <div class="iconbtn"><i data-lucide="shield-check"></i></div>
+        </div>
+        <div class="body">
+          <div class="pad" style="padding-top:4px;padding-bottom:6px;">
+            <div class="h2" style="font-size:18px;">지금 실행하면 좋은<br>행동 3가지</div>
+            <div class="lead" style="margin-top:6px;">운영·마케팅·금융 준비를 하나의 실행 계획으로 묶었어요.</div>
+          </div>
+          <div style="height:6px"></div>
+
+          <div class="scard op">
+            <div class="si"><i data-lucide="package"></i></div>
+            <div class="mid">
+              <div class="tg">운영</div>
+              <div class="ti">원재료 발주량 10% 조정</div>
+              <div class="ef"><span class="icn sm"><i data-lucide="trending-up"></i></span>현금 유지 <b>+6일</b></div>
+            </div>
+            <div class="chk"><i data-lucide="check"></i></div>
+          </div>
+
+          <div class="scard mk">
+            <div class="si"><i data-lucide="ticket"></i></div>
+            <div class="mid">
+              <div class="tg">마케팅</div>
+              <div class="ti">평일 오후 재방문 쿠폰 발행</div>
+              <div class="ef"><span class="icn sm"><i data-lucide="trending-up"></i></span>매출 회복 <b>+8% 기대</b></div>
+            </div>
+            <div class="chk"><i data-lucide="check"></i></div>
+          </div>
+
+          <div class="scard fi">
+            <div class="si"><i data-lucide="file-text"></i></div>
+            <div class="mid">
+              <div class="tg">금융</div>
+              <div class="ti">상담 준비 리포트 생성</div>
+              <div class="ef"><span class="icn sm"><i data-lucide="trending-up"></i></span>금융 준비도 <b>58% → 79%</b></div>
+            </div>
+            <div class="chk off"></div>
+          </div>
+
+          <div class="callout" style="margin-top:6px;background:var(--soft);border-left-color:var(--muted-2);">
+            <span class="icn" style="color:var(--muted)"><i data-lucide="shield-check"></i></span>
+            <div class="ct" style="color:var(--muted)">모든 추천은 특정 금융상품 가입을 유도하지 않으며, 근거 검증을 거칩니다.</div>
+          </div>
+          <div style="height:8px"></div>
+        </div>
+        <div class="footbtn">
+          <button class="btn pri">선택한 전략 시뮬레이션<span class="icn"><i data-lucide="line-chart"></i></span></button>
+        </div>
+      </div></div>
+      <div class="cap"><div class="n">STEP 05</div><div class="t">금융 운영 전략</div><div class="d">운영·마케팅·금융 카드</div></div>
+    </div>
+
+    <!-- ============ 6. SIMULATION ============ -->
+    <div class="unit" style="animation-delay:.42s">
+      <div class="device"><div class="screen">
+        <div class="notch"></div>
+        <div class="sbar"><span class="num">9:41</span><span class="r"><i data-lucide="signal"></i><i data-lucide="wifi"></i><i data-lucide="battery-full"></i></span></div>
+        <div class="appbar">
+          <div class="back"><i data-lucide="arrow-left"></i></div>
+          <div class="at">현금흐름 시뮬레이션</div>
+          <div style="width:34px"></div>
+        </div>
+        <div class="body">
+          <div class="simhead">
+            <div class="col"><div class="l">현재</div><div class="n now num">17일</div></div>
+            <div class="arrow"><i data-lucide="move-right"></i></div>
+            <div class="col"><div class="l">전략 적용 후</div><div class="n aft num">31일</div></div>
+          </div>
+          <div class="gain">현금 유지 기간 +14일 확보</div>
+
+          <div class="chartwrap">
+            <svg viewBox="0 0 300 150" width="100%" height="150">
+              <line x1="0" y1="40" x2="300" y2="40" stroke="#EEF1F6" stroke-width="1"/>
+              <line x1="0" y1="80" x2="300" y2="80" stroke="#EEF1F6" stroke-width="1"/>
+              <line x1="0" y1="120" x2="300" y2="120" stroke="#EEF1F6" stroke-width="1"/>
+              <!-- current declining -->
+              <path d="M6,46 L60,62 L114,82 L168,104 L222,126 L290,140" fill="none"
+                stroke="#C0322B" stroke-width="2.4" stroke-dasharray="5 5" stroke-linecap="round"/>
+              <!-- projected improving -->
+              <path d="M6,46 L60,52 L114,56 L168,52 L222,46 L290,40" fill="none"
+                stroke="#2563EB" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="290" cy="40" r="3.8" fill="#2563EB"/>
+              <circle cx="290" cy="140" r="3.4" fill="#C0322B"/>
+            </svg>
+            <div class="legend">
+              <span><i style="background:#2563EB"></i>전략 적용</span>
+              <span><i style="background:#C0322B"></i>현재 구조</span>
+            </div>
+          </div>
+
+          <div class="divfull"></div>
+
+          <div class="simrow">
+            <div class="k"><span class="icn md"><i data-lucide="receipt"></i></span>월 비용</div>
+            <div class="vchg" style="color:var(--ok)"><span class="was num">₩4.2M</span><i data-lucide="arrow-right" style="width:13px;height:13px;color:var(--muted-2)"></i>₩3.78M</div>
+          </div>
+          <div class="simrow">
+            <div class="k"><span class="icn md"><i data-lucide="trending-up"></i></span>예상 매출 회복</div>
+            <div class="vchg" style="color:var(--ok)">+8.0%</div>
+          </div>
+          <div class="simrow" style="border-bottom:none;">
+            <div class="k"><span class="icn md"><i data-lucide="droplet"></i></span>유동성 위험도</div>
+            <div class="vchg"><span class="pill risk">높음</span><i data-lucide="arrow-right" style="width:13px;height:13px;color:var(--muted-2)"></i><span class="pill warn">중간</span></div>
+          </div>
+          <div style="height:10px"></div>
+        </div>
+        <div class="footbtn">
+          <button class="btn pri">이 계획으로 진행<span class="icn"><i data-lucide="check"></i></span></button>
+        </div>
+      </div></div>
+      <div class="cap"><div class="n">STEP 06</div><div class="t">현금흐름 시뮬레이션</div><div class="d">실행 전후 비교</div></div>
+    </div>
+
+    <!-- ============ 7. FINANCE CONNECT ============ -->
+    <div class="unit" style="animation-delay:.5s">
+      <div class="device"><div class="screen">
+        <div class="notch"></div>
+        <div class="sbar"><span class="num">9:41</span><span class="r"><i data-lucide="signal"></i><i data-lucide="wifi"></i><i data-lucide="battery-full"></i></span></div>
+        <div class="appbar">
+          <div class="back"><i data-lucide="arrow-left"></i></div>
+          <div class="at">금융 준비</div>
+          <div class="iconbtn"><i data-lucide="shield-check"></i></div>
+        </div>
+        <div class="body">
+          <div class="pad" style="padding-top:2px;padding-bottom:6px;">
+            <div class="h2" style="font-size:18px;">봄날 카페 상황에<br>맞는 금융 준비</div>
+            <div class="lead" style="margin-top:6px;">진단 결과를 바탕으로, 상담 때 확인해두면 좋은 방향을 정리했어요.</div>
+          </div>
+
+          <div class="finrow">
+            <div class="fi"><i data-lucide="wallet"></i></div>
+            <div class="fm">
+              <div class="ttl2">단기 운전자금 <span class="pill b">상황 적합</span></div>
+              <div class="rs">17일 현금 공백 구간을 안정적으로 넘기는 데 맞는 방향이에요.</div>
+              <div class="fitline"><div class="fitbar"><i style="width:92%"></i></div><span class="fitpc num">92</span></div>
+              <div class="prov"><span class="icn sm"><i data-lucide="link"></i></span>JB 사업자 단기 자금 · 한도·금리는 상담에서 확인</div>
+            </div>
+          </div>
+
+          <div class="finrow">
+            <div class="fi"><i data-lucide="landmark"></i></div>
+            <div class="fm">
+              <div class="ttl2">경영안정 정책자금 <span class="pill b">검토 권장</span></div>
+              <div class="rs">비용 압박을 낮추는 저금리 정책자금 요건에 가까워요.</div>
+              <div class="fitline"><div class="fitbar"><i style="width:78%"></i></div><span class="fitpc num">78</span></div>
+              <div class="prov"><span class="icn sm"><i data-lucide="link"></i></span>중기부 공고 연계 · 신청 자격은 상담에서 확인</div>
+            </div>
+          </div>
+
+          <div class="finrow" style="border-bottom:none;">
+            <div class="fi"><i data-lucide="coins"></i></div>
+            <div class="fm">
+              <div class="ttl2">지역화폐 가맹 연계 <span class="pill warn">선택 사항</span></div>
+              <div class="rs">평일 오후 재방문 유도 마케팅과 함께 쓰기 좋아요.</div>
+              <div class="fitline"><div class="fitbar"><i style="width:64%"></i></div><span class="fitpc num">64</span></div>
+              <div class="prov"><span class="icn sm"><i data-lucide="link"></i></span>전북 지역화폐 가맹 · 마케팅 전략과 연계</div>
+            </div>
+          </div>
+
+          <div class="jbnote">
+            <span class="icn md"><i data-lucide="info"></i></span>
+            <span>특정 상품 가입을 권유하지 않습니다. 적합도는 진단 데이터 기반 참고 지표이며, 최종 판단은 금융기관 상담·심사로 이뤄집니다.</span>
+          </div>
+          <div style="height:10px"></div>
+        </div>
+        <div class="footbtn">
+          <button class="btn pri">JB금융그룹 상담으로 연결<span class="icn"><i data-lucide="arrow-right"></i></span></button>
+        </div>
+      </div></div>
+      <div class="cap"><div class="n">STEP 07</div><div class="t">맞춤 금융 연결</div><div class="d">진단 기반 금융 옵션</div></div>
+    </div>
+
+    <!-- ============ 8. REPORT ============ -->
+    <div class="unit" style="animation-delay:.58s">
+      <div class="device"><div class="screen">
+        <div class="notch"></div>
+        <div class="sbar"><span class="num">9:41</span><span class="r"><i data-lucide="signal"></i><i data-lucide="wifi"></i><i data-lucide="battery-full"></i></span></div>
+        <div class="appbar">
+          <div class="back"><i data-lucide="arrow-left"></i></div>
+          <div class="at">상담 준비 리포트</div>
+          <div class="iconbtn"><i data-lucide="share-2"></i></div>
+        </div>
+        <div class="body">
+          <div class="paper">
+            <div class="ph">
+              <div class="lg"><svg class="fpm" viewBox="30 100 870 590" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:16px;height:16px"><path d="M 420.50 437.50 Q 421.00 435.00 416.00 434.50 Q 411.00 434.00 365.00 440.00 Q 319.00 446.00 308.00 448.50 Q 297.00 451.00 271.00 459.50 Q 245.00 468.00 236.00 472.00 Q 227.00 476.00 213.50 484.00 Q 200.00 492.00 183.00 506.50 Q 166.00 521.00 105.00 594.00 Q 44.00 667.00 44.00 669.00 Q 44.00 671.00 109.50 671.00 Q 175.00 671.00 192.50 668.00 Q 210.00 665.00 220.50 661.50 Q 231.00 658.00 243.50 652.00 Q 256.00 646.00 272.00 634.50 Q 288.00 623.00 303.50 606.50 Q 319.00 590.00 346.50 551.50 Q 374.00 513.00 397.00 476.50 Q 420.00 440.00 420.50 437.50 Z" fill="currentColor"/><path d="M 777.50 215.00 Q 780.00 207.00 779.00 206.00 Q 778.00 205.00 765.00 214.00 Q 752.00 223.00 735.00 232.50 Q 718.00 242.00 705.50 247.50 Q 693.00 253.00 673.50 259.50 Q 654.00 266.00 617.50 274.00 Q 581.00 282.00 506.50 292.00 Q 432.00 302.00 409.00 307.50 Q 386.00 313.00 372.00 318.00 Q 358.00 323.00 337.00 334.00 Q 316.00 345.00 296.50 359.50 Q 277.00 374.00 259.50 391.50 Q 242.00 409.00 231.50 422.00 Q 221.00 435.00 216.50 442.50 Q 212.00 450.00 214.00 451.00 Q 216.00 452.00 239.50 441.50 Q 263.00 431.00 284.00 425.00 Q 305.00 419.00 328.50 414.50 Q 352.00 410.00 408.00 402.50 Q 464.00 395.00 496.50 389.50 Q 529.00 384.00 563.50 376.00 Q 598.00 368.00 620.50 360.00 Q 643.00 352.00 656.00 345.50 Q 669.00 339.00 680.50 331.50 Q 692.00 324.00 709.00 309.50 Q 726.00 295.00 734.00 286.00 Q 742.00 277.00 752.50 262.00 Q 763.00 247.00 769.00 235.00 Q 775.00 223.00 777.50 215.00 Z" fill="currentColor"/><path d="M 726.50 341.50 Q 731.00 327.00 728.00 327.00 Q 725.00 327.00 715.00 336.00 Q 705.00 345.00 686.50 357.50 Q 668.00 370.00 650.00 379.00 Q 632.00 388.00 609.00 397.00 Q 586.00 406.00 577.00 410.50 Q 568.00 415.00 559.50 420.50 Q 551.00 426.00 545.00 431.00 Q 539.00 436.00 529.00 446.50 Q 519.00 457.00 511.00 468.00 Q 503.00 479.00 455.00 550.50 Q 407.00 622.00 406.50 624.50 Q 406.00 627.00 420.50 627.00 Q 435.00 627.00 449.50 625.50 Q 464.00 624.00 483.50 619.50 Q 503.00 615.00 514.00 611.50 Q 525.00 608.00 546.50 598.00 Q 568.00 588.00 580.50 579.50 Q 593.00 571.00 601.00 564.00 Q 609.00 557.00 620.50 544.50 Q 632.00 532.00 643.50 515.00 Q 655.00 498.00 665.00 480.50 Q 675.00 463.00 689.50 432.50 Q 704.00 402.00 713.00 379.00 Q 722.00 356.00 726.50 341.50 Z" fill="currentColor"/><circle cx="842.39" cy="157.99" r="45.16" fill="currentColor"/></svg>FinPilot · 금융 상담 요약</div>
+              <div class="tt">봄날 카페 사업 진단 리포트</div>
+              <div class="dt num">2026.05.29 생성 · 전주시 완산구</div>
+            </div>
+            <div class="toc">
+              <div class="tocrow"><div class="nx">1</div><div class="nm">매출 추이 (최근 90일)</div><span class="icn"><i data-lucide="chevron-right"></i></span></div>
+              <div class="tocrow"><div class="nx">2</div><div class="nm">비용 구조 분석</div><span class="icn"><i data-lucide="chevron-right"></i></span></div>
+              <div class="tocrow"><div class="nx">3</div><div class="nm">위험 원인 및 기여도</div><span class="icn"><i data-lucide="chevron-right"></i></span></div>
+              <div class="tocrow"><div class="nx">4</div><div class="nm">실행 계획 · 현금흐름 전망</div><span class="icn"><i data-lucide="chevron-right"></i></span></div>
+            </div>
+          </div>
+
+          <div class="qbox">
+            <div class="qt"><span class="icn md"><i data-lucide="message-circle-question"></i></span>상담 시 확인할 질문</div>
+            <div class="q"><span class="icn sm"><i data-lucide="check-circle-2"></i></span>운전자금 한도와 금리 조건은 어떻게 되나요?</div>
+            <div class="q"><span class="icn sm"><i data-lucide="check-circle-2"></i></span>현 현금흐름으로 가능한 정책자금 종류는?</div>
+            <div class="q"><span class="icn sm"><i data-lucide="check-circle-2"></i></span>상환 부담을 줄이는 구조는 어떤 게 있나요?</div>
+          </div>
+
+          <div class="readybar">
+            <div class="l"><span class="icn md"><i data-lucide="badge-check"></i></span>금융 준비도</div>
+            <div class="v num">79% · 상담 준비 완료</div>
+          </div>
+          <div style="height:12px"></div>
+        </div>
+        <div class="footbtn">
+          <div class="twobtn">
+            <button class="btn ghost" style="flex:1"><span class="icn"><i data-lucide="calendar-check"></i></span>상담 예약</button>
+            <button class="btn pri" style="flex:1.3"><span class="icn"><i data-lucide="download"></i></span>PDF 다운로드</button>
+          </div>
+        </div>
+      </div></div>
+      <div class="cap"><div class="n">STEP 08</div><div class="t">상담 준비 리포트</div><div class="d">요약 자료 · 질문 · PDF</div></div>
+    </div>
+
+  </div>
+
+<script>
+  lucide.createIcons();
+</script>
+</body>
+</html>
