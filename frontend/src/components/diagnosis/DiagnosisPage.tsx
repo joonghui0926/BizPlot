@@ -176,7 +176,7 @@ export function DiagnosisPage({ store }: Props) {
             <>
               <div className="h-2 bg-slate-100 border-y border-slate-100 mt-1" />
               <div className="px-5 pt-4 pb-4">
-                <CauseBasisSection summary={diagnosis.summary} causes={causes} />
+                <CauseBasisSection causes={causes} />
               </div>
             </>
           )}
@@ -331,7 +331,7 @@ export function DiagnosisPage({ store }: Props) {
                 {/* AI 종합 분석 — 기여도 산정 근거 */}
                 {(diagnosis.summary || causes.length > 0) && (
                   <div className="border-b border-slate-100 py-6">
-                    <CauseBasisSection summary={diagnosis.summary} causes={causes} />
+                    <CauseBasisSection causes={causes} />
                   </div>
                 )}
               </div>
@@ -443,34 +443,35 @@ export function DiagnosisPage({ store }: Props) {
   )
 }
 
-// 기여도(%) 산정 근거를 항목별 정량 bullet으로 표현하는 섹션
-function CauseBasisSection({ summary, causes }: { summary: string | null; causes: Cause[] }) {
+// 기여도(%)가 "왜 정확히 그 수치인지"를 항목별 정량 근거로 해명하는 섹션.
+// 위 요약/원인분해를 반복하지 않고, basis(데이터 근거)만 flat하게 보여준다.
+function CauseBasisSection({ causes }: { causes: Cause[] }) {
   return (
     <div>
-      <div className="text-[11px] font-extrabold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-        <BarChart3 size={13} className="text-blue-500" />AI 종합 분석 · 기여도 산정 근거
+      <div className="text-[11px] font-extrabold text-slate-500 uppercase tracking-widest mb-1 flex items-center gap-2">
+        <BarChart3 size={13} className="text-blue-500" />기여도 산정 근거
       </div>
-      {summary && <p className="text-[12.5px] text-slate-600 leading-relaxed mb-4">{summary}</p>}
-      <div className="space-y-2.5">
+      <p className="text-[11.5px] text-slate-400 mb-1">각 요인의 비중이 왜 그 수치인지 데이터로 설명합니다.</p>
+      <div>
         {causes.map((c, i) => (
-          <div key={i} className="rounded-xl border border-slate-100 bg-slate-50/70 px-3.5 py-3">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[13px] font-bold text-slate-800">{c.factor}</span>
-              <span className={`text-[14px] font-extrabold tabular-nums ${i === 0 ? "text-red-600" : i === 1 ? "text-amber-600" : "text-slate-800"}`}>
+          <div key={i} className="py-3.5 border-b border-slate-100 last:border-0">
+            <div className="flex items-baseline justify-between mb-2">
+              <span className="text-[13.5px] font-bold text-slate-800">{c.factor}</span>
+              <span className={`text-[15px] font-extrabold tabular-nums flex-shrink-0 ml-3 ${i === 0 ? "text-red-600" : i === 1 ? "text-amber-600" : "text-slate-700"}`}>
                 {c.contribution.toFixed(0)}%
               </span>
             </div>
             {c.basis && c.basis.length > 0 ? (
-              <ul className="space-y-1">
+              <ul className="space-y-1.5">
                 {c.basis.map((b, j) => (
-                  <li key={j} className="flex gap-1.5 text-[11.5px] text-slate-600 leading-snug">
-                    <span className="text-blue-500 font-bold flex-shrink-0">·</span>
+                  <li key={j} className="flex gap-2 text-[12px] text-slate-600 leading-relaxed">
+                    <span className="w-1 h-1 rounded-full bg-blue-400 flex-shrink-0 mt-[7px]" />
                     <span>{b}</span>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="text-[11.5px] text-slate-500 leading-snug">{c.description}</p>
+              <p className="text-[12px] text-slate-500 leading-relaxed">{c.description}</p>
             )}
           </div>
         ))}

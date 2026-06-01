@@ -192,24 +192,29 @@ JSON 형식으로만 출력하세요 (다른 텍스트 없이):
 {{
   "causes": [
     {{"factor": "원인명", "contribution": 기여도숫자, "confidence": "high|medium|low",
-      "description": "한 줄 핵심 설명",
-      "basis": ["이 기여도(%)를 그렇게 산정한 정량적 근거 1", "근거 2", "근거 3"]}}
+      "description": "한 줄 핵심 설명(목록 표시용)",
+      "basis": ["기여도 산정 근거 1", "근거 2", "근거 3", "근거 4"]}}
   ],
   "review_causes": [],
   "summary": "한두 문장 요약"
 }}
 
 요구사항:
-- causes는 반드시 4~6개, contribution 합계는 정확히 100
-- 각 원인의 "basis"에는 그 기여도(%)가 왜 그 수치인지 **정량적 근거를 2~3개 bullet**으로 쓴다.
-  위에 제공된 실제 수치(매출 변화율, 시간대별 매출 비중, 일평균 거래건수, 반경 내 경쟁 점포 수,
-  비용/매출 비율, 강수일, 리뷰 감성·키워드)만 인용한다. 입력에 없는 숫자는 절대 지어내지 않는다.
-- basis 예시: "오후(13-17시) 매출 비중 28%로 전체 시간대 중 최저", "일평균 거래 142→118건(-17%)"
-- 기여도가 큰 원인일수록 basis 근거가 더 강하고 구체적이어야 한다 (정량적·합리적).
-- 금융상품 추천 금지"""
+- causes는 반드시 4~6개, contribution 합계는 정확히 100.
+- **"basis"는 이 화면에서 "왜 정확히 이 기여도(%)인지"를 정량적으로 해명하는 핵심**이다. 각 원인마다 **서로 다른 근거 3~4개**를 쓰되:
+  · 매 근거는 위 [매출·시간대·비용·상권·날씨·리뷰] 중 **실제 수치를 직접 인용**하고, 가능하면 그 수치가 전체 매출 {abs(ctx['trend_pct']):.1f}% {trend_dir} 중 **몇 %p를 설명하는지** 연결한다.
+  · **factor 이름·description·summary 문장을 반복 금지.** 각 근거는 위에서 말하지 않은 새로운 정량 정보여야 한다.
+  · 입력에 없는 숫자는 절대 지어내지 않는다.
+- basis 작성 예시(이 수준의 구체성·길이):
+    "오후(13-17시) 비중 {ctx['afternoon_pct']:.0f}%로 점심 {ctx['lunch_pct']:.0f}%·저녁 {ctx['evening_pct']:.0f}%보다 약해, 평일 오후 공백이 하락의 약 X%p를 설명"
+    "일평균 거래 {ctx['txn_p']:.0f}→{ctx['txn_r']:.0f}건으로 객단가가 아닌 방문빈도 하락이 매출 감소를 주도"
+    "반경 500m 동종 {ctx['competitors']}개(신규 {ctx['new_competitors']}개)로 과밀 구간, 점유율 희석이 구조적 압력"
+- 기여도가 큰 원인일수록 basis가 더 많고 구체적이어야 한다.
+- **summary에 언급하는 기여도 %는 반드시 causes의 contribution 값과 정확히 일치**시킨다 (서로 다른 숫자 금지).
+- 금융상품 추천 금지."""
 
     system = "너는 소상공인의 금융 운영을 설계하는 AI CFO Agent이다. 사업 데이터를 분석하여 현금흐름 위험을 진단한다. JSON만 출력한다."
-    response = call_llm(prompt, system=system, max_tokens=800)
+    response = call_llm(prompt, system=system, max_tokens=1200)
     return _parse_json(response)
 
 
