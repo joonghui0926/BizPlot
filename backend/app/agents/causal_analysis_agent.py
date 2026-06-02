@@ -1,7 +1,23 @@
 """
-Causal Analysis Agent — LLM-first
-파인튜닝된 Qwen(finpilot)이 데이터를 직접 읽고 원인을 추론.
-LLM 실패 시 규칙 기반으로 폴백.
+Causal Analysis Agent — Graph-based XAI (Explainable AI)
+
+매출 변화의 원인을 "인과 귀속 그래프(Causal Attribution Graph)"로 분해한다.
+
+    증거(evidence)  ─┐
+                     ├─►  요인(factor)  ─►  매출 변화(outcome)
+    증거(evidence)  ─┘
+
+핵심 설계 (왜 "설명 가능"한가):
+- 기여도(%)는 LLM이 통째로 발명하지 않는다. 먼저 매출 변화를 **물량(객수) 효과 vs
+  단가(객단가) 효과**로 회계적으로 분해(revenue bridge)하고, 물량 효과를 측정된
+  드라이버(경쟁·시간대·날씨·리뷰 등)의 정량 점수에 비례해 배분한다.
+- 따라서 각 요인의 contribution(%)은 **자식 증거 노드의 weight_pp 합**으로 유도된다.
+  "22% = 9%p + 8%p + 5%p" 처럼 항상 더해서 떨어진다(가산성).
+- 모든 증거 노드는 실제 측정값(raw_value)에 묶이며, ctx에 없는 숫자는 만들지 않는다(접지).
+- LLM(finpilot)은 숫자 생성기가 아니라 **그래프 위 서술자**로만 쓰인다: 요약과
+  요인 한 줄 설명의 자연어 표현만 다듬고, 숫자는 절대 바꾸지 못한다(검증기가 고정).
+
+LLM/데이터가 불충분하면 규칙 기반으로 폴백한다.
 """
 import json
 import logging
@@ -53,24 +69,31 @@ def analyze_causes(store: Store, state: BusinessState, db: Session) -> Diagnosis
     ctx = _build_context(store, state, sales_recent, sales_prior, costs,
                          commerce_sig, weather_sig, review_sig)
 
-    # ── LLM 분석 (파인튜닝 Qwen) ─────────────────────────────────────────────
-    causes, review_causes, summary = [], [], ""
+    # ── 결정론적 인과 귀속 그래프 (XAI 백본) ─────────────────────────────────
+    graph = build_causal_graph(store, state, ctx)
+    causes = graph["causes"]
+    review_causes = graph["review_causes"]
+    summary = graph["summary"]
+
+    # ── LLM(finpilot) 서술 오버레이 — 숫자는 그대로, 자연어 표현만 개선 ───────
     try:
-        result = _llm_analyze(store, state, ctx)
-        if result and _validate(result):
-            causes = result.get("causes", [])
-            review_causes = result.get("review_causes", [])
-            summary = result.get("summary", "")
-            logger.info(f"LLM analysis OK: {len(causes)} causes for {store.name}")
-        else:
-            logger.warning("LLM result invalid, falling back to rule-based")
-            causes, review_causes, summary = _rule_based(state, ctx, review_sig)
+        narration = _llm_narrate(store, state, ctx, causes)
+        if narration:
+            summary = narration.get("summary") or summary
+            _apply_narration(causes, narration)
+            logger.info(f"LLM narration applied for {store.name}")
     except Exception as e:
-        logger.warning(f"LLM analysis failed ({e}), falling back to rule-based")
+        logger.warning(f"LLM narration skipped ({e}); using deterministic text")
+
+    # ── 그래프가 비면 규칙 기반 폴백 ─────────────────────────────────────────
+    if not causes:
+        logger.warning("Causal graph empty, falling back to rule-based")
         causes, review_causes, summary = _rule_based(state, ctx, review_sig)
 
-    # 원인은 항상 최소 4개 보장 (부족하면 데이터 기반 후보로 보강 + 재정규화)
+    # 최소 원인 보장 + 가산성 재정규화 + basis(증거→근거) 동기화
     causes = _ensure_min_causes(causes, ctx, minimum=4)
+    for c in causes:
+        _sync_basis(c)
     if not summary and causes:
         summary = f"매출 변화의 주요 원인은 '{causes[0]['factor']}'({causes[0]['contribution']:.0f}%)입니다."
 
@@ -119,11 +142,25 @@ def _build_context(store, state, sales_r, sales_p, costs,
     total_cost = fixed + variable
     cost_ratio = total_cost / rev_r * 100 if rev_r > 0 else 0
 
-    # 일 평균 거래건수 변화
+    # 거래건수 — 일평균 + 매출 브릿지용 객단가
     days_r = len(set(s.date for s in sales_r if s.date)) or 1
     days_p = len(set(s.date for s in sales_p if s.date)) or 1
-    txn_r = sum(s.transaction_count or 1 for s in sales_r) / days_r
-    txn_p = sum(s.transaction_count or 1 for s in sales_p) / days_p if sales_p else txn_r
+    total_txn_r = sum(s.transaction_count or 1 for s in sales_r)
+    total_txn_p = sum(s.transaction_count or 1 for s in sales_p)
+    txn_r = total_txn_r / days_r                       # 일평균 거래건수(최근)
+    txn_p = (total_txn_p / days_p) if sales_p else txn_r  # 일평균 거래건수(직전)
+
+    # ── 매출 브릿지: 일매출 변화 = 물량효과 + 단가효과 ──────────────────────
+    daily_rev_r = rev_r / days_r
+    daily_rev_p = (rev_p / days_p) if rev_p > 0 else daily_rev_r
+    price_p = (daily_rev_p / txn_p) if txn_p > 0 else 0   # 직전 객단가
+    price_r = (daily_rev_r / txn_r) if txn_r > 0 else 0   # 최근 객단가
+    volume_pp = price_pp = None
+    if daily_rev_p > 0 and txn_p > 0:
+        volume_effect = (txn_r - txn_p) * price_p        # 객수 변화 × 직전 객단가
+        price_effect = txn_r * (price_r - price_p)        # 최근 객수 × 객단가 변화
+        volume_pp = volume_effect / daily_rev_p * 100     # 전체 매출 대비 %p
+        price_pp = price_effect / daily_rev_p * 100        # (volume_pp + price_pp ≈ trend_pct)
 
     return {
         "rev_r": rev_r, "rev_p": rev_p, "trend_pct": trend_pct,
@@ -134,6 +171,8 @@ def _build_context(store, state, sales_r, sales_p, costs,
         "weekend_pct": weekend_pct,
         "fixed": fixed, "variable": variable, "cost_ratio": cost_ratio,
         "txn_r": txn_r, "txn_p": txn_p,
+        "price_p": price_p, "price_r": price_r,
+        "volume_pp": volume_pp, "price_pp": price_pp,
         "competitors": (commerce.payload or {}).get("same_category_count", 0) if commerce else 0,
         "new_competitors": (commerce.payload or {}).get("new_last_3months", 0) if commerce else 0,
         "rainy_days": (weather.payload or {}).get("rainy_days_recent", 0) if weather else 0,
@@ -144,86 +183,345 @@ def _build_context(store, state, sales_r, sales_p, costs,
     }
 
 
-# ── LLM 프롬프트 + 파싱 ───────────────────────────────────────────────────────
+# ── 인과 귀속 그래프 (결정론적) ───────────────────────────────────────────────
 
-def _llm_analyze(store, state, ctx: dict) -> dict | None:
+def build_causal_graph(store, state, ctx: dict) -> dict:
+    """증거→요인→매출 그래프를 데이터에서 결정론적으로 산정한다.
+
+    반환: {"causes": [factor 노드...], "review_causes": [...], "summary": str}
+    각 factor 노드는 evidence[](증거 노드) + contribution(=Σ evidence.weight_pp)를 갖는다.
+    """
+    trend = ctx["trend_pct"]
+    direction = "감소" if trend < 0 else "증가"
+    sign = -1.0 if trend < 0 else 1.0
+
+    # ── 1. 매출 브릿지: 변화를 물량 vs 단가로 회계 분해 ──────────────────────
+    vol_pp, price_pp = ctx.get("volume_pp"), ctx.get("price_pp")
+    # 관측된 방향(감소/증가)에 기여한 크기만 양수로 취한다.
+    vol_adv = max(0.0, sign * vol_pp) if vol_pp is not None else 0.0
+    price_adv = max(0.0, sign * price_pp) if price_pp is not None else 0.0
+
+    # ── 2. 물량 요인(factor) 후보 — 각 증거에 정량 adverse 점수 부여 ─────────
+    factors = _volume_factors(ctx, direction)
+    score_sum = sum(f["_score"] for f in factors) or 0.0
+
+    bridge_ok = (vol_pp is not None and price_pp is not None
+                 and (vol_adv + price_adv) > 0.5 and score_sum > 0)
+
+    if bridge_ok:
+        # 물량 효과(vol_adv %p)를 요인 점수 비례로 배분, 단가 효과는 별도 요인.
+        for f in factors:
+            f_pp = vol_adv * (f["_score"] / score_sum)
+            ev_sum = sum(e["_score"] for e in f["evidence"]) or 1.0
+            for e in f["evidence"]:
+                e["_pp"] = f_pp * (e["_score"] / ev_sum)
+        if price_adv > 0.3:
+            factors.append(_price_factor(ctx, price_adv, direction))
+    else:
+        # 브릿지 산정 불가 → 요인 점수만으로 배분(여전히 접지된 그래프).
+        if score_sum <= 0:
+            return {"causes": [], "review_causes": _review_causes(ctx), "summary": ""}
+        for f in factors:
+            f_pp = f["_score"]
+            ev_sum = sum(e["_score"] for e in f["evidence"]) or 1.0
+            for e in f["evidence"]:
+                e["_pp"] = f_pp * (e["_score"] / ev_sum)
+
+    # ── 3. 정규화: 모든 증거 weight_pp 합 = 100 (가산성 보장) ────────────────
+    total_pp = sum(e["_pp"] for f in factors for e in f["evidence"]) or 1.0
+    scale = 100.0 / total_pp
+    for f in factors:
+        for e in f["evidence"]:
+            e["weight_pp"] = round(e["_pp"] * scale, 1)
+        f["contribution"] = round(sum(e["weight_pp"] for e in f["evidence"]), 1)
+
+    # 반올림 잔차를 최대 요인에 흡수해 합계를 정확히 100으로 맞춘다.
+    _balance_to_100(factors)
+
+    # ── 4. factor 노드 정리(내부 키 제거) + 기여도 순 정렬 ───────────────────
+    causes = []
+    for f in sorted(factors, key=lambda x: x["contribution"], reverse=True):
+        if f["contribution"] <= 0:
+            continue
+        evidence = [{
+            "id": e["id"], "label": e["label"], "metric": e["metric"],
+            "raw_value": e["raw_value"], "delta": e.get("delta", ""),
+            "when": e["when"], "mechanism": e["mechanism"],
+            "weight_pp": e["weight_pp"], "source": e["source"],
+        } for e in f["evidence"] if e["weight_pp"] > 0]
+        if not evidence:
+            continue
+        causes.append({
+            "factor": f["factor"],
+            "contribution": f["contribution"],
+            "confidence": f["confidence"],
+            "group": f["group"],
+            "description": f["description"],
+            "evidence": evidence,
+        })
+
+    summary = _deterministic_summary(ctx, causes, direction)
+    return {"causes": causes, "review_causes": _review_causes(ctx), "summary": summary}
+
+
+def _volume_factors(ctx: dict, direction: str) -> list[dict]:
+    """매출 물량(객수) 변화를 설명하는 요인 노드 후보. 각 증거는 실측값+정량 점수를 가진다."""
+    factors: list[dict] = []
+    comp = ctx["competitors"]
+    new_comp = ctx["new_competitors"]
+
+    # 경쟁 심화 -----------------------------------------------------------------
+    comp_ev = []
+    if comp >= 2:
+        comp_ev.append({
+            "id": "comp_density", "metric": "competitors", "raw_value": comp, "delta": "",
+            "label": f"반경 500m 내 동종 점포 {comp}개",
+            "when": "현재 상권", "mechanism": "동종 점포 과밀 → 방문 고객 분산·점유율 희석",
+            "source": "commerce_radius", "_score": min(comp, 15) * 0.4,
+        })
+    if new_comp >= 1:
+        comp_ev.append({
+            "id": "comp_new", "metric": "new_competitors", "raw_value": new_comp, "delta": f"+{new_comp}",
+            "label": f"최근 3개월 신규 진입 {new_comp}개",
+            "when": "최근 3개월", "mechanism": "신규 진입 점포로 기존 고객 이탈 가속",
+            "source": "commerce_radius", "_score": new_comp * 1.6,
+        })
+    if comp_ev:
+        factors.append({
+            "factor": "반경 내 경쟁 심화", "group": "competition",
+            "confidence": "high" if new_comp >= 2 else "medium",
+            "description": f"반경 500m 동종 점포 {comp}개(신규 {new_comp}개)로 고객 분산",
+            "evidence": comp_ev, "_score": sum(e["_score"] for e in comp_ev),
+        })
+
+    # 시간대 수요 공백 ----------------------------------------------------------
+    tod_ev = []
+    trough = max(0.0, ctx["lunch_pct"] - ctx["afternoon_pct"])
+    if trough > 3 and ctx["afternoon_pct"] > 0:
+        tod_ev.append({
+            "id": "tod_afternoon", "metric": "afternoon_pct",
+            "raw_value": round(ctx["afternoon_pct"], 1), "delta": f"점심 대비 -{trough:.0f}%p",
+            "label": f"오후(13-17시) 비중 {ctx['afternoon_pct']:.0f}% · 점심 {ctx['lunch_pct']:.0f}% 대비 저조",
+            "when": "평일 오후 13-17시", "mechanism": "오후 유휴 시간대 방문 공백 → 일 매출 베이스 약화",
+            "source": "sales_hourly", "_score": min(trough, 30) * 0.5,
+        })
+    if ctx["weekend_pct"] > 0 and ctx["weekend_pct"] < 24:
+        gap = 24 - ctx["weekend_pct"]
+        tod_ev.append({
+            "id": "tod_weekend", "metric": "weekend_pct",
+            "raw_value": round(ctx["weekend_pct"], 1), "delta": f"기준 대비 -{gap:.0f}%p",
+            "label": f"주말 매출 비중 {ctx['weekend_pct']:.0f}%로 주중 의존 심화",
+            "when": "주말", "mechanism": "주말 집객 부진 → 주간 매출 편중·변동성 확대",
+            "source": "sales_weekday", "_score": min(gap, 20) * 0.25,
+        })
+    if tod_ev:
+        factors.append({
+            "factor": "시간대 수요 공백", "group": "timeofday", "confidence": "medium",
+            "description": f"오후(13-17시) 비중 {ctx['afternoon_pct']:.0f}% 등 특정 시간대 방문 둔화",
+            "evidence": tod_ev, "_score": sum(e["_score"] for e in tod_ev),
+        })
+
+    # 날씨·외부 환경 ------------------------------------------------------------
+    wx_ev = []
+    if ctx["rainy_days"] >= 3:
+        wx_ev.append({
+            "id": "wx_rain", "metric": "rainy_days", "raw_value": ctx["rainy_days"], "delta": "",
+            "label": f"최근 강수일 {ctx['rainy_days']}일",
+            "when": "최근 30일", "mechanism": "강수일 증가 → 방문형 매장 유입 감소",
+            "source": "weather_daily", "_score": max(0, ctx["rainy_days"] - 2) * 0.7,
+        })
+    if ctx["temp_drop"] <= -3:
+        wx_ev.append({
+            "id": "wx_temp", "metric": "temp_drop", "raw_value": round(ctx["temp_drop"], 1),
+            "delta": f"{ctx['temp_drop']:+.0f}도",
+            "label": f"전월 대비 평균 기온 {ctx['temp_drop']:+.0f}도",
+            "when": "최근 30일", "mechanism": "기온 급변으로 외출·방문 수요 둔화",
+            "source": "weather_daily", "_score": min(abs(ctx["temp_drop"]), 12) * 0.25,
+        })
+    if wx_ev:
+        factors.append({
+            "factor": "날씨·외부 환경", "group": "weather", "confidence": "medium",
+            "description": f"강수일 {ctx['rainy_days']}일 등 외부 환경 요인으로 방문 둔화",
+            "evidence": wx_ev, "_score": sum(e["_score"] for e in wx_ev),
+        })
+
+    # 고객 경험 신호 ------------------------------------------------------------
+    if ctx["sentiment"] is not None and (ctx["sentiment"] < 0.4 or ctx["neg_keywords"]):
+        sent_pct = int((ctx["sentiment"] + 1) * 50)
+        rv_ev = [{
+            "id": "rv_sentiment", "metric": "sentiment", "raw_value": sent_pct, "delta": "",
+            "label": f"리뷰 감성 점수 {sent_pct}/100",
+            "when": "최근 리뷰 기간", "mechanism": "부정 경험 누적 → 재방문율 하락",
+            "source": "review_signal", "_score": max(0.0, 0.5 - ctx["sentiment"]) * 6,
+        }]
+        if ctx["neg_keywords"]:
+            kws = ", ".join(ctx["neg_keywords"][:3])
+            rv_ev.append({
+                "id": "rv_keywords", "metric": "neg_keywords", "raw_value": len(ctx["neg_keywords"]),
+                "delta": "", "label": f"부정 키워드: {kws}",
+                "when": "최근 리뷰 기간", "mechanism": "반복되는 불만 키워드 → 신규 유입·전환 저해",
+                "source": "review_signal", "_score": min(len(ctx["neg_keywords"]), 5) * 0.5,
+            })
+        factors.append({
+            "factor": "고객 경험 신호 악화", "group": "review", "confidence": "medium",
+            "description": f"리뷰 감성 {sent_pct}/100, 부정 키워드 증가로 재방문 둔화",
+            "evidence": rv_ev, "_score": sum(e["_score"] for e in rv_ev),
+        })
+
+    # 기타 수요 둔화(잔차) — 위 요인으로 설명되지 않는 객수 감소 흡수 ----------
+    factors.append({
+        "factor": "전반적 방문·재방문 둔화", "group": "demand", "confidence": "low",
+        "description": f"일평균 거래 {ctx['txn_p']:.0f}→{ctx['txn_r']:.0f}건, 신규·재방문 유입 둔화",
+        "evidence": [{
+            "id": "demand_txn", "metric": "txn", "raw_value": round(ctx["txn_r"], 0),
+            "delta": f"{ctx['txn_p']:.0f}→{ctx['txn_r']:.0f}건",
+            "label": f"일평균 거래건수 {ctx['txn_p']:.0f}→{ctx['txn_r']:.0f}건",
+            "when": "최근 30일", "mechanism": "특정 요인 외 전반적 객수 둔화(채널·재방문 점검 필요)",
+            "source": "sales_daily", "_score": 1.0,
+        }],
+        "_score": 1.0,
+    })
+    return factors
+
+
+def _price_factor(ctx: dict, price_adv: float, direction: str) -> dict:
+    """단가(객단가) 효과를 별도 요인으로. weight는 정규화 단계에서 _pp로 부여."""
+    p_from, p_to = ctx["price_p"], ctx["price_r"]
+    ev = {
+        "id": "price_ticket", "metric": "avg_ticket", "raw_value": round(p_to, 0),
+        "delta": f"₩{p_from:,.0f}→₩{p_to:,.0f}",
+        "label": f"객단가 ₩{p_from:,.0f}→₩{p_to:,.0f}",
+        "when": "최근 30일", "mechanism": "객단가 하락(세트·고마진 비중 축소) → 동일 객수에도 매출 감소",
+        "source": "sales_bridge", "_score": price_adv, "_pp": price_adv,
+    }
+    return {
+        "factor": "객단가·구성 변화", "group": "price", "confidence": "high",
+        "description": f"객단가 ₩{p_from:,.0f}→₩{p_to:,.0f}로 1인당 구매액 변화",
+        "evidence": [ev], "_score": price_adv,
+    }
+
+
+def _balance_to_100(factors: list[dict]) -> None:
+    """반올림 잔차를 최대 기여 요인(과 그 최대 증거)에 흡수시켜 합계를 100.0으로 맞춘다."""
+    total = sum(f["contribution"] for f in factors)
+    diff = round(100.0 - total, 1)
+    if abs(diff) < 0.05 or not factors:
+        return
+    top = max(factors, key=lambda f: f["contribution"])
+    top["contribution"] = round(top["contribution"] + diff, 1)
+    if top["evidence"]:
+        te = max(top["evidence"], key=lambda e: e["weight_pp"])
+        te["weight_pp"] = round(te["weight_pp"] + diff, 1)
+
+
+def _review_causes(ctx: dict) -> list[dict]:
+    if ctx["sentiment"] is None or not ctx["neg_keywords"]:
+        return []
+    return [{
+        "factor": "고객 리뷰 부정 신호",
+        "keywords": ctx["neg_keywords"][:5],
+        "description": ctx["review_signal"] or "부정 키워드 증가",
+        "confidence": "medium",
+    }]
+
+
+def _deterministic_summary(ctx: dict, causes: list[dict], direction: str) -> str:
+    if not causes:
+        return ""
+    top = causes[0]
+    parts = [
+        f"매출 {abs(ctx['trend_pct']):.1f}% {direction}의 가장 큰 요인은 "
+        f"'{top['factor']}'({top['contribution']:.0f}%)입니다."
+    ]
+    if ctx.get("volume_pp") is not None and ctx.get("price_pp") is not None:
+        parts.append(
+            f"변화는 물량(객수) {ctx['volume_pp']:+.1f}%p, 단가(객단가) {ctx['price_pp']:+.1f}%p로 분해됩니다."
+        )
+    if len(causes) > 1:
+        parts.append(f"'{causes[1]['factor']}'({causes[1]['contribution']:.0f}%)도 복합적으로 작용합니다.")
+    return " ".join(parts)
+
+
+# ── LLM 서술 오버레이 (숫자 불변, 자연어만) ───────────────────────────────────
+
+def _llm_narrate(store, state, ctx: dict, causes: list[dict]) -> dict | None:
+    """그래프(요인+기여도)는 고정한 채, finpilot이 요약과 요인 한 줄 설명의 표현만 다듬는다.
+    숫자(contribution/weight_pp)는 프롬프트에서 '바꾸지 말 것'으로 못박고, 적용 단계에서도
+    텍스트 필드만 반영한다."""
+    if not causes:
+        return None
     trend_dir = "감소" if ctx["trend_pct"] < 0 else "증가"
-    runway = state.cash_runway_days or 0
-
-    sentiment_line = ""
-    if ctx["sentiment"] is not None:
-        score_pct = int((ctx["sentiment"] + 1) * 50)
-        kws = ", ".join(ctx["neg_keywords"]) if ctx["neg_keywords"] else "없음"
-        sentiment_line = f"- 고객 리뷰 감성 점수: {score_pct}/100 (부정 키워드: {kws})"
-    if ctx["review_signal"]:
-        sentiment_line += f"\n- 리뷰 신호: {ctx['review_signal']}"
+    lines = []
+    for i, c in enumerate(causes):
+        ev = "; ".join(f"{e['label']}({e['weight_pp']:.0f}%p)" for e in c.get("evidence", []))
+        lines.append(f"{i}. {c['factor']} — {c['contribution']:.0f}% [증거: {ev}]")
+    factors_block = "\n".join(lines)
 
     prompt = f"""{store.category} '{store.name}'의 최근 30일 매출이 {abs(ctx['trend_pct']):.1f}% {trend_dir}했습니다.
-현금 유지 가능 기간은 {runway:.0f}일로 예측됩니다.
+아래는 데이터에서 산정이 끝난 매출 변화 원인 그래프입니다. **기여도(%)와 증거 수치는 이미 확정**되었습니다.
 
-다음 데이터를 바탕으로 매출 하락 원인을 분해하고 기여도를 분석해주세요:
+[원인 그래프 — 숫자 고정]
+{factors_block}
 
-[매출 데이터]
-- 최근 30일 매출: ₩{ctx['rev_r']:,.0f} (전월 대비 {ctx['trend_pct']:+.1f}%)
-- 일 평균 거래건수 변화: {ctx['txn_p']:.0f}건 → {ctx['txn_r']:.0f}건
+당신의 역할은 숫자를 바꾸는 것이 아니라, 각 원인을 **소상공인이 이해하기 쉬운 자연어 한 줄**로 다듬고
+전체를 1~2문장으로 요약하는 것입니다.
 
-[시간대별 매출 비중]
-- 오전(7-11시): {ctx['morning_pct']:.0f}%
-- 점심(11-13시): {ctx['lunch_pct']:.0f}%
-- 오후(13-17시): {ctx['afternoon_pct']:.0f}%
-- 저녁(17-21시): {ctx['evening_pct']:.0f}%
-- 주말 매출 비중: {ctx['weekend_pct']:.0f}%
-
-[비용 구조]
-- 고정비: ₩{ctx['fixed']:,.0f} / 변동비: ₩{ctx['variable']:,.0f}
-- 비용/매출 비율: {ctx['cost_ratio']:.0f}%
-
-[상권 신호]
-- 반경 500m 내 동종 점포: {ctx['competitors']}개 (최근 3개월 신규 {ctx['new_competitors']}개)
-
-[날씨 신호]
-- 최근 강수일: {ctx['rainy_days']}일
-- 기온 변화: {ctx['temp_drop']:+.0f}도
-
-[고객 리뷰]
-{sentiment_line if sentiment_line else '- 리뷰 데이터 없음'}
-
-JSON 형식으로만 출력하세요 (다른 텍스트 없이):
+JSON만 출력하세요:
 {{
-  "causes": [
-    {{"factor": "원인명", "contribution": 기여도숫자, "confidence": "high|medium|low",
-      "description": "한 줄 핵심 설명(목록 표시용)",
-      "basis": ["기여도 산정 근거 1", "근거 2", "근거 3", "근거 4"]}}
-  ],
-  "review_causes": [],
-  "summary": "한두 문장 요약"
+  "summary": "기여도 %를 그대로 인용한 1~2문장 요약",
+  "factors": [
+    {{"index": 0, "description": "이 원인을 설명하는 자연스러운 한 줄(수치는 위 증거와 일치)"}}
+  ]
 }}
 
-요구사항:
-- causes는 반드시 4~6개, contribution 합계는 정확히 100.
-- **"basis"는 이 화면에서 "왜 정확히 이 기여도(%)인지"를 정량적으로 해명하는 핵심**이다. 각 원인마다 **서로 다른 근거 3~4개**를 쓰되:
-  · 매 근거는 위 [매출·시간대·비용·상권·날씨·리뷰] 중 **실제 수치를 직접 인용**하고, 가능하면 그 수치가 전체 매출 {abs(ctx['trend_pct']):.1f}% {trend_dir} 중 **몇 %p를 설명하는지** 연결한다.
-  · **factor 이름·description·summary 문장을 반복 금지.** 각 근거는 위에서 말하지 않은 새로운 정량 정보여야 한다.
-  · 입력에 없는 숫자는 절대 지어내지 않는다.
-- basis 작성 예시(이 수준의 구체성·길이):
-    "오후(13-17시) 비중 {ctx['afternoon_pct']:.0f}%로 점심 {ctx['lunch_pct']:.0f}%·저녁 {ctx['evening_pct']:.0f}%보다 약해, 평일 오후 공백이 하락의 약 X%p를 설명"
-    "일평균 거래 {ctx['txn_p']:.0f}→{ctx['txn_r']:.0f}건으로 객단가가 아닌 방문빈도 하락이 매출 감소를 주도"
-    "반경 500m 동종 {ctx['competitors']}개(신규 {ctx['new_competitors']}개)로 과밀 구간, 점유율 희석이 구조적 압력"
-- 기여도가 큰 원인일수록 basis가 더 많고 구체적이어야 한다.
-- **summary에 언급하는 기여도 %는 반드시 causes의 contribution 값과 정확히 일치**시킨다 (서로 다른 숫자 금지).
+규칙:
+- contribution(%) 숫자를 새로 만들거나 바꾸지 말 것. 위 값만 인용.
+- 증거에 없는 숫자를 지어내지 말 것.
+- summary의 % 는 위 그래프의 contribution 과 정확히 일치시킬 것.
 - 금융상품 추천 금지."""
-
-    system = "너는 소상공인의 금융 운영을 설계하는 AI CFO Agent이다. 사업 데이터를 분석하여 현금흐름 위험을 진단한다. JSON만 출력한다."
-    response = call_llm(prompt, system=system, max_tokens=1200)
+    system = "너는 소상공인의 금융 운영을 설계하는 AI CFO Agent이다. 확정된 분석 결과를 쉬운 한국어로 서술한다. JSON만 출력한다."
+    response = call_llm(prompt, system=system, max_tokens=700)
     return _parse_json(response)
 
+
+def _apply_narration(causes: list[dict], narration: dict) -> None:
+    """LLM이 돌려준 텍스트만 반영. 숫자/구조는 절대 건드리지 않는다."""
+    factors = narration.get("factors")
+    if not isinstance(factors, list):
+        return
+    for item in factors:
+        if not isinstance(item, dict):
+            continue
+        try:
+            idx = int(item.get("index"))
+        except (TypeError, ValueError):
+            continue
+        desc = item.get("description")
+        if 0 <= idx < len(causes) and isinstance(desc, str) and desc.strip():
+            causes[idx]["description"] = desc.strip()
+
+
+def _sync_basis(cause: dict) -> None:
+    """증거 노드에서 basis(기여도 산정 근거 bullet)를 파생. 하위호환 + 프론트 즉시 표시용."""
+    evidence = cause.get("evidence")
+    if evidence:
+        cause["basis"] = [
+            f"{e['label']} — {e['mechanism']} · 약 {e['weight_pp']:.0f}%p"
+            for e in evidence
+        ]
+    elif not cause.get("basis"):
+        d = cause.get("description")
+        cause["basis"] = [d] if d else []
+    elif isinstance(cause["basis"], str):
+        cause["basis"] = [cause["basis"]]
+
+
+# ── JSON 파싱 ────────────────────────────────────────────────────────────────
 
 def _parse_json(text: str) -> dict | None:
     if not text or not text.strip():
         return None
-    # <think>...</think> 제거
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
-    # JSON 블록 추출
     for pattern in [r"```json\s*(.*?)\s*```", r"```\s*(.*?)\s*```", r"(\{.*\})"]:
         m = re.search(pattern, text, re.DOTALL)
         if m:
@@ -235,30 +533,6 @@ def _parse_json(text: str) -> dict | None:
         return json.loads(text)
     except json.JSONDecodeError:
         return None
-
-
-def _validate(result: dict) -> bool:
-    if not isinstance(result, dict):
-        return False
-    causes = result.get("causes", [])
-    if not causes or not isinstance(causes, list):
-        return False
-    if len(causes) < 2 or len(causes) > 8:
-        return False
-    for c in causes:
-        if not isinstance(c, dict):
-            return False
-        if "factor" not in c or "contribution" not in c:
-            return False
-        try:
-            pct = float(c["contribution"])
-            if pct <= 0 or pct > 100:
-                return False
-        except (TypeError, ValueError):
-            return False
-    total = sum(float(c.get("contribution", 0)) for c in causes)
-    # 합계가 60~140% 범위면 정규화
-    return 60 <= total <= 140
 
 
 # ── 최소 원인 개수 보장 ───────────────────────────────────────────────────────
@@ -321,7 +595,6 @@ def _candidate_causes(ctx: dict) -> list[dict]:
                          f"부정 키워드: {', '.join(ctx['neg_keywords'][:3])}",
                          "부정 경험은 재방문율 하락으로 이어짐",
                      ]})
-    # 항상 마지막 보강용 일반 원인
     pool.append({"factor": "신규 고객 유입 채널 둔화", "contribution": 10,
                  "confidence": "medium",
                  "description": "온라인 노출·재방문 유도 채널 점검 필요",
@@ -348,7 +621,6 @@ def _ensure_min_causes(causes: list, ctx: dict, minimum: int = 4) -> list:
         for cand in _candidate_causes(ctx):
             if len(causes) >= minimum:
                 break
-            # 비슷한 factor 중복 방지 (앞 4글자 겹치면 스킵)
             if cand["factor"] in existing or any(cand["factor"][:4] in f or f[:4] in cand["factor"] for f in existing):
                 continue
             causes.append(cand)
@@ -360,7 +632,6 @@ def _ensure_min_causes(causes: list, ctx: dict, minimum: int = 4) -> list:
     for c in causes:
         c["contribution"] = round(float(c.get("contribution", 0) or 0) * scale, 1)
         c.setdefault("confidence", "medium")
-        # basis(정량 근거) 보장: 없으면 description을 근거 한 줄로라도 채운다
         if not c.get("basis"):
             d = c.get("description")
             c["basis"] = [d] if d else []
@@ -416,7 +687,6 @@ def _rule_based(state, ctx, review_sig):
             "description": f"최근 강수일 {ctx['rainy_days']}일 — 방문형 매장 영향",
         })
 
-    # 최소 3개 보장
     if len(causes) < 3:
         causes.append({
             "factor": "신규 고객 유입 둔화",
@@ -425,7 +695,6 @@ def _rule_based(state, ctx, review_sig):
             "description": "일 평균 거래건수 감소, 재방문·신규 유입 채널 점검 필요",
         })
 
-    # 정규화
     total = sum(c["contribution"] for c in causes) or 1
     scale = 100 / total
     for c in causes:

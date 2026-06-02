@@ -28,12 +28,27 @@ export interface BusinessState {
   }
 }
 
+// 인과 귀속 그래프의 증거 노드(leaf). 기여도(%)의 정량적 근거 단위.
+export interface EvidenceNode {
+  id: string
+  label: string          // 실측값 기반 한 줄 (예: "반경 500m 동종 점포 12개")
+  metric: string         // 어느 지표에서 왔는지
+  raw_value: number | string
+  delta?: string         // 변화량 표기 (예: "120→95건")
+  when: string           // 언제 (예: "평일 오후 13-17시")
+  mechanism: string      // 어떻게 매출에 작용했는지
+  weight_pp: number      // 이 증거가 설명하는 기여도(%p)
+  source: string         // 데이터 출처
+}
+
 export interface Cause {
   factor: string
-  contribution: number
+  contribution: number   // = Σ evidence.weight_pp (가산성 보장)
   confidence: "high" | "medium" | "low"
   description: string
-  basis?: string[]   // 기여도(%) 산정의 정량적 근거 bullet
+  group?: string         // competition|timeofday|weather|review|price|demand
+  evidence?: EvidenceNode[]  // 증거→요인 그래프의 자식 노드들
+  basis?: string[]       // 기여도(%) 산정의 정량적 근거 bullet (evidence에서 파생)
   detail?: Record<string, unknown>
 }
 

@@ -1,10 +1,10 @@
 "use client"
 import { useEffect, useState, useRef } from "react"
-import { Clock, Store, Package, CloudRain, MessageSquare, BarChart3, Map, CloudSun, TrendingDown, TrendingUp, ChevronRight } from "lucide-react"
+import { MessageSquare, BarChart3, Map, CloudSun, TrendingDown, TrendingUp, GitBranch } from "lucide-react"
 import { getDashboard, getReviewSignals } from "@/lib/api"
 import { useDiagnosis } from "@/components/diagnosis/DiagnosisContext"
+import { CausalFlowDesktop, CausalFlowMobile } from "@/components/diagnosis/CausalFlowGraph"
 import type { Dashboard, Store as StoreType, Cause } from "@/lib/types"
-import { Badge } from "@/components/ui/Badge"
 import { AppShell } from "@/components/layout/AppShell"
 
 interface ReviewSignal {
@@ -15,22 +15,6 @@ interface ReviewSignal {
 }
 
 interface Props { store: StoreType }
-
-const FACTOR_ICONS: [string, React.ReactNode][] = [
-  ["평일 오후", <Clock size={15} key="c" />],
-  ["시간대", <Clock size={15} key="c2" />],
-  ["경쟁", <Store size={15} key="s" />],
-  ["점포", <Store size={15} key="s2" />],
-  ["비용", <Package size={15} key="p" />],
-  ["원재료", <Package size={15} key="p2" />],
-  ["날씨", <CloudRain size={15} key="r" />],
-  ["강수", <CloudRain size={15} key="r2" />],
-  ["리뷰", <MessageSquare size={15} key="m" />],
-]
-
-function getIcon(factor: string) {
-  return FACTOR_ICONS.find(([k]) => factor.includes(k))?.[1] ?? <BarChart3 size={15} />
-}
 
 export function DiagnosisPage({ store }: Props) {
   const [data, setData] = useState<Dashboard | null>(null)
@@ -129,45 +113,21 @@ export function DiagnosisPage({ store }: Props) {
             </div>
           )}
 
-          {/* Cause breakdown */}
+          {/* 인과 귀속 그래프 (증거 → 요인 → 매출·가게 변화) */}
           {causes.length > 0 && (
             <>
               <div className="flex items-center justify-between px-5 pt-5 pb-1">
                 <h3 className="text-[13.5px] font-extrabold text-slate-800 flex items-center gap-2">
                   <span className="w-[3px] h-[14px] bg-blue-600 rounded-sm flex-shrink-0" />
-                  매출 하락 원인 분해
+                  <GitBranch size={14} className="text-blue-600" />원인 인과 그래프
                 </h3>
               </div>
-              {causes.map((cause, i) => (
-                <div key={i} className="px-5 py-4 border-b border-slate-100">
-                  <div className="flex items-center justify-between mb-2.5">
-                    <div className="flex items-center gap-2 text-[13.5px] font-bold text-slate-800">
-                      <span className="text-slate-400">{getIcon(cause.factor)}</span>
-                      {cause.factor}
-                    </div>
-                    <span className="text-[17px] font-extrabold tabular-nums">{cause.contribution.toFixed(0)}%</span>
-                  </div>
-                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden mb-2.5">
-                    <div
-                      className={`h-full rounded-full ${
-                        i === 0 ? "bg-red-500"
-                        : i === 1 ? "bg-amber-400"
-                        : "bg-blue-500"
-                      } transition-all duration-700`}
-                      style={{ width: `${cause.contribution}%` }}
-                    />
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[11.5px] text-slate-400 flex-1 leading-relaxed">{cause.description}</span>
-                    <Badge
-                      variant={cause.confidence === "high" ? "ok" : "warn"}
-                      className="text-[10.5px] flex-shrink-0"
-                    >
-                      신뢰도 {cause.confidence === "high" ? "높음" : "중간"}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
+              <p className="text-[11.5px] text-slate-400 px-5 pb-2">데이터 증거가 어떤 요인을 통해 매출에 작용했는지 추적합니다.</p>
+              <CausalFlowMobile
+                causes={causes}
+                trendPct={(state?.revenue_trend ?? 0) * 100}
+                runwayDays={state?.cash_runway_days ?? null}
+              />
             </>
           )}
 
@@ -276,34 +236,18 @@ export function DiagnosisPage({ store }: Props) {
             <div className="grid grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_420px] 2xl:grid-cols-[minmax(0,1fr)_460px] gap-0 divide-x divide-slate-100">
               <div className="pr-8 xl:pr-10 2xl:pr-12">
 
-                {/* Cause breakdown */}
+                {/* 인과 귀속 그래프 (증거 → 요인 → 매출·가게 변화) */}
                 {causes.length > 0 && (
                   <div className="border-b border-slate-100 py-6">
-                    <div className="text-[11px] font-extrabold text-slate-500 uppercase tracking-widest flex items-center gap-2 mb-4">
-                      <BarChart3 size={13} />매출 하락 원인 분해
+                    <div className="text-[11px] font-extrabold text-slate-500 uppercase tracking-widest flex items-center gap-2 mb-1">
+                      <GitBranch size={13} className="text-blue-600" />원인 인과 그래프 (Explainable AI)
                     </div>
-                    <div className="divide-y divide-slate-100">
-                      {causes.map((cause, i) => (
-                        <div key={i} className="py-4">
-                          <div className="flex items-start justify-between gap-2 mb-2.5">
-                            <div className="flex items-center gap-2.5 text-[13.5px] font-bold text-slate-800">
-                              <span className="text-slate-400">{getIcon(cause.factor)}</span>{cause.factor}
-                            </div>
-                            <span className="text-[17px] font-extrabold tabular-nums flex-shrink-0">{cause.contribution.toFixed(0)}%</span>
-                          </div>
-                          <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden mb-2">
-                            <div className={`h-full rounded-full ${i===0?"bg-red-500":i===1?"bg-amber-400":"bg-blue-500"} transition-all duration-700`}
-                              style={{ width: `${cause.contribution}%` }} />
-                          </div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-[11.5px] text-slate-400 flex-1 leading-relaxed">{cause.description}</span>
-                            <Badge variant={cause.confidence === "high" ? "ok" : "warn"} className="text-[10.5px] flex-shrink-0">
-                              신뢰도 {cause.confidence === "high" ? "높음" : "중간"}
-                            </Badge>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                    <p className="text-[12px] text-slate-400 mb-5">데이터 증거가 어떤 요인을 통해 매출·현금에 작용했는지 추적합니다.</p>
+                    <CausalFlowDesktop
+                      causes={causes}
+                      trendPct={(state?.revenue_trend ?? 0) * 100}
+                      runwayDays={state?.cash_runway_days ?? null}
+                    />
                   </div>
                 )}
 
