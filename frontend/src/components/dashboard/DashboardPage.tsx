@@ -229,15 +229,6 @@ export function DashboardPage({ store }: Props) {
                       style={{ width: `${cause.contribution}%`, transition: "width 0.8s ease" }}
                     />
                   </div>
-                  {cause.confidence && (
-                    <div className="flex items-center gap-1.5 mt-2.5">
-                      <span className={`inline-flex items-center gap-1 text-[10.5px] font-bold px-2 py-0.5 rounded-md ${
-                        cause.confidence === "high" ? "text-green-700 bg-green-50" : "text-amber-700 bg-amber-50"
-                      }`}>
-                        신뢰도 {cause.confidence === "high" ? "높음" : "중간"}
-                      </span>
-                    </div>
-                  )}
                 </div>
               ))}
             </>

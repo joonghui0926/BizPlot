@@ -29,7 +29,6 @@ const GROUP_STYLE: Record<string, { hex: string; text: string; bar: string; dot:
   default:     { hex: "#2563eb", text: "text-blue-600",    bar: "bg-blue-500",    dot: "bg-blue-500",    icon: <Users size={14} /> },
 }
 const styleOf = (c: Cause) => GROUP_STYLE[c.group ?? "default"] ?? GROUP_STYLE.default
-const confLabel = (c: string) => (c === "high" ? "높음" : c === "low" ? "낮음" : "중간")
 
 // ────────────────────────────────────────────────────────────────────────────
 // DESKTOP — 측정 기반 SVG DAG (증거 → 요인 → 결과)
@@ -144,7 +143,6 @@ export function CausalFlowDesktop({ causes, trendPct, runwayDays }: Props) {
                     <div className="h-1.5 bg-slate-100 overflow-hidden">
                       <div className={`h-full ${st.bar} transition-all duration-700`} style={{ width: `${c.contribution}%` }} />
                     </div>
-                    <div className="mt-1.5 text-[10.5px] text-slate-400">신뢰도 {confLabel(c.confidence)}</div>
                   </div>
                 </div>
               )
