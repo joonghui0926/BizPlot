@@ -49,11 +49,17 @@ def generate_action_plan(
             a["id"] = str(uuid.uuid4())
     actions.sort(key=lambda a: a.get("priority", 9))
     actions, risk_flags = _verify_actions(actions)
+    actions = actions[:7]
+
+    # XAI: 각 전략이 "왜 그만큼의 효과를 낼 것으로 기대되는지"를 Qwen이 진단
+    # 데이터(원인·증거·매출 금액) 기반으로 직접 서술. 실패해도 프론트가 결정론
+    # 설명으로 폴백하므로 전략 생성 자체는 막지 않는다.
+    _attach_rationales(store, state, diagnosis, actions)
 
     plan = ActionPlan(
         store_id=store.id,
         diagnosis_id=diagnosis.id,
-        actions=actions[:7],
+        actions=actions,
         rag_references=rag_refs[:3],
         verified="passed" if not risk_flags else "flagged",
     )
@@ -110,6 +116,134 @@ def _llm_strategies(store, state, diagnosis, rag_refs) -> list:
     system = "너는 소상공인의 금융 운영을 설계하는 AI CFO Agent이다. 데이터 기반 실행 전략을 JSON으로만 출력한다."
     response = call_llm(prompt, system=system, max_tokens=1000)
     return _parse_action_json(response)
+
+
+# ── XAI 근거 서술 (Qwen이 진단 데이터 위에서 전략별로 직접 설명) ──────────────────
+def _attach_rationales(store, state, diagnosis, actions: list) -> None:
+    """각 action dict에 rationale(list[str])를 채운다(in-place). LLM 실패 시 미부착."""
+    if not actions:
+        return
+    try:
+        rationales = _llm_strategy_rationales(store, state, diagnosis, actions)
+    except Exception as e:
+        logger.warning(f"LLM rationale failed ({e}); frontend will fall back to deterministic XAI")
+        rationales = {}
+
+    for idx, a in enumerate(actions, start=1):
+        raw = rationales.get(str(idx)) or rationales.get(idx) or []
+        if isinstance(raw, str):
+            raw = [raw]
+        clean = [str(l).strip() for l in raw if isinstance(l, str) and len(str(l).strip()) >= 8]
+        # 중복 문장 제거(같은 전략 안에서)
+        seen, deduped = set(), []
+        for l in clean:
+            if l not in seen:
+                seen.add(l)
+                deduped.append(l)
+        if len(deduped) >= 3:        # 충분할 때만 부착 (아니면 프론트 폴백)
+            a["rationale"] = deduped[:7]
+
+
+def _llm_strategy_rationales(store, state, diagnosis, actions: list) -> dict:
+    causes = diagnosis.causes or []
+
+    cause_lines = []
+    for c in causes[:5]:
+        ev = c.get("evidence") or []
+        ev_txt = "; ".join(
+            f"{e.get('label','')}({e.get('when','')} · {e.get('mechanism','')})"
+            for e in ev[:3] if e.get("label")
+        )
+        cause_lines.append(
+            f"  - {c.get('factor')} 기여도 {float(c.get('contribution', 0)):.0f}%"
+            + (f" | 증거: {ev_txt}" if ev_txt else f" | {c.get('description','')}")
+        )
+    causes_block = "\n".join(cause_lines) or "  - (원인 데이터 없음)"
+
+    detail = state.detail or {}
+    recent = detail.get("recent_revenue_30d")
+    prior = detail.get("prior_revenue_30d")
+    rev_block = ""
+    if recent is not None:
+        rev_block = f"- 최근 30일 매출: {recent:,.0f}원"
+        if prior is not None:
+            rev_block += f" (이전 30일: {prior:,.0f}원)"
+
+    action_lines = []
+    for idx, a in enumerate(actions, start=1):
+        imp = a.get("expected_impact", {}) or {}
+        parts = []
+        if imp.get("revenue_change_pct"):
+            parts.append(f"매출 {imp['revenue_change_pct']:+g}%")
+        if imp.get("cost_change_pct"):
+            parts.append(f"비용 {imp['cost_change_pct']:+g}%")
+        if imp.get("cash_runway_days_delta"):
+            parts.append(f"현금 +{imp['cash_runway_days_delta']:g}일")
+        if imp.get("finance_readiness_delta"):
+            parts.append(f"금융준비 +{imp['finance_readiness_delta']:g}p")
+        imp_txt = ", ".join(parts) or "효과 미지정"
+        action_lines.append(f"{idx}. [{a.get('type')}] {a.get('title')} — {a.get('description')} (기대효과: {imp_txt})")
+    actions_block = "\n".join(action_lines)
+
+    prompt = f"""{store.category} '{store.name}'의 진단 결과와 추천 전략이다.
+
+[사업 상태]
+- 매출 추세: {state.revenue_trend*100:+.1f}%
+- 현금 유지: {state.cash_runway_days:.0f}일
+- 비용 압박: {state.cost_pressure:.0f}/100
+{rev_block}
+
+[진단된 매출 변화 원인 (기여도·증거)]
+{causes_block}
+
+[추천 전략]
+{actions_block}
+
+각 전략에 대해 '왜 이 전략이 그만큼의 효과를 낼 것으로 기대되는지'를 설명하는 근거를 5~6줄씩 작성하라.
+줄마다 서로 다른 관점을 담되 다음을 빠짐없이 반영한다:
+1) 이 전략이 위 진단 원인 중 무엇을 공략하는지 + 그 원인의 기여도(%)
+2) 과거 데이터/증거에서의 구체적 근거 (위에 제시된 수치를 인용)
+3) 그 행동이 매출·비용·현금을 움직이는 메커니즘
+4) 기대효과 수치를 위 매출 금액 기준으로 환산한 산출 (예: 매출 +8% ≈ 월 약 OOO원)
+5) 그 수치가 현실적이라고 보는 이유
+6) 적용 후 무엇을 보고 효과를 검증할지
+
+[엄수]
+- 전략끼리 같은 문장·표현을 반복하지 말 것. 전략마다 다른 데이터·이유를 사용하라.
+- 위에 주어진 숫자만 사용하고 새로운 수치를 지어내지 말 것.
+- 한국어로 작성하고, 각 줄은 한 문장으로 끝낸다.
+- 아래 JSON 형식으로만 출력한다(다른 텍스트 없이). 전략 번호 1~{len(actions)}을 모두 포함하라:
+{{
+  "1": ["근거 문장1", "근거 문장2", "근거 문장3", "근거 문장4", "근거 문장5"],
+  "2": ["근거 문장1", "근거 문장2", "근거 문장3", "근거 문장4", "근거 문장5"]
+}}"""
+
+    system = "너는 소상공인 AI CFO Agent이다. 데이터에 근거해 전략의 기대효과를 반복 없이 설명하고, 지정된 JSON으로만 출력한다."
+    # 전략 수×5~6줄 분량 → JSON 중간 truncation 시 파싱 실패로 전체 폴백되므로 여유있게.
+    response = call_llm(prompt, system=system, max_tokens=3000)
+    return _parse_rationale_json(response)
+
+
+def _parse_rationale_json(text: str) -> dict:
+    if not text or not text.strip():
+        return {}
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+    for pattern in [r"```json\s*(.*?)\s*```", r"```\s*(.*?)\s*```", r"(\{.*\})"]:
+        m = re.search(pattern, text, re.DOTALL)
+        if m:
+            try:
+                result = json.loads(m.group(1))
+                if isinstance(result, dict):
+                    return result
+            except json.JSONDecodeError:
+                continue
+    try:
+        result = json.loads(text)
+        if isinstance(result, dict):
+            return result
+    except json.JSONDecodeError:
+        pass
+    return {}
 
 
 def _parse_action_json(text: str) -> list:

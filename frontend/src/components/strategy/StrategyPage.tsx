@@ -214,7 +214,9 @@ export function StrategyPage({ store }: Props) {
                       </div>
                       {isOpen && (
                         <div className="px-4 pb-4">
-                          <XaiList lines={buildActionXai(action, state, causes)} />
+                          {action.rationale && action.rationale.length >= 3
+                            ? <RationaleBullets lines={action.rationale} />
+                            : <XaiList lines={buildActionXai(action, state, causes)} />}
                         </div>
                       )}
                     </div>
@@ -491,9 +493,26 @@ function ActionCard({ action, checked, onToggle, open, onToggleOpen, xai }: {
       </div>
       {open && (
         <div className="pl-4 mt-3">
-          <XaiList lines={xai} />
+          {action.rationale && action.rationale.length >= 3
+            ? <RationaleBullets lines={action.rationale} />
+            : <XaiList lines={xai} />}
         </div>
       )}
+    </div>
+  )
+}
+
+// Qwen이 생성한 전략 근거(문장 배열)를 회색 박스 없이 불릿으로 평면 렌더 (진단 근거와 동일 톤)
+function RationaleBullets({ lines }: { lines: string[] }) {
+  if (!lines.length) return null
+  return (
+    <div className="border-l-2 border-blue-100 pl-3.5 space-y-2">
+      {lines.map((l, i) => (
+        <div key={i} className="flex gap-2 text-[12px] text-slate-600 leading-relaxed">
+          <span className="w-1 h-1 rounded-full bg-blue-400 flex-shrink-0 mt-[7px]" />
+          <span>{l}</span>
+        </div>
+      ))}
     </div>
   )
 }

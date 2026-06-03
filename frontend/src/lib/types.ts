@@ -80,6 +80,7 @@ export interface Action {
     cost_change_pct?: number
     finance_readiness_delta?: number
   }
+  rationale?: string[]   // Qwen이 진단 데이터 기반으로 생성한 기대효과 근거(XAI). 없으면 프론트 결정론 폴백.
 }
 
 export interface ActionPlan {
