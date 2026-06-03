@@ -9,7 +9,7 @@
  * 세로 흐름으로 동일한 인과 사슬을 표현한다. (flat 디자인, rounded box 떡칠 지양)
  */
 import { useLayoutEffect, useRef, useState } from "react"
-import { Store, Clock, CloudRain, MessageSquare, Coins, Users, TrendingDown, TrendingUp, ArrowRight } from "lucide-react"
+import { Store, Clock, CloudRain, MessageSquare, Coins, Users, TrendingDown, TrendingUp } from "lucide-react"
 import type { Cause } from "@/lib/types"
 
 interface Props {
@@ -177,14 +177,20 @@ export function CausalFlowDesktop({ causes, trendPct, runwayDays }: Props) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// MOBILE — 세로 인과 흐름 (요인 → 증거 들여쓰기 → 매출 기여)
+// MOBILE — 100% 구성 막대 + 세로 인과 흐름
+//   상단의 누적(stacked) 막대 하나로 "각 요인 %가 합쳐 매출 변화 전체(100%)를
+//   구성한다"는 점을 즉시 보여주고, 그 아래에서 요인→증거를 평면으로 펼친다.
 // ────────────────────────────────────────────────────────────────────────────
 export function CausalFlowMobile({ causes, trendPct, runwayDays }: Props) {
   const down = trendPct < 0
+  // 막대가 화면 폭을 정확히 채우도록 기여도를 정규화(라벨은 원본 %를 유지).
+  const totalContribution = causes.reduce((s, c) => s + c.contribution, 0) || 1
+  const segs = causes.map(c => ({ c, st: styleOf(c), share: (c.contribution / totalContribution) * 100 }))
+
   return (
     <div>
-      {/* 결과 헤더 (흐름의 종착점) */}
-      <div className={`flex items-center gap-3 px-5 py-3 border-l-4 ${down ? "border-red-500" : "border-green-500"} bg-slate-50/60`}>
+      {/* 결과 헤더 (흐름의 종착점) — flat, 회색 박스 없음 */}
+      <div className={`flex items-center gap-3 px-5 py-3 border-l-4 ${down ? "border-red-500" : "border-green-500"}`}>
         {down ? <TrendingDown size={20} className="text-red-600" /> : <TrendingUp size={20} className="text-green-600" />}
         <div className="flex-1">
           <div className="text-[10.5px] font-extrabold uppercase tracking-widest text-slate-400">매출·가게 변화</div>
@@ -197,21 +203,54 @@ export function CausalFlowMobile({ causes, trendPct, runwayDays }: Props) {
         </div>
       </div>
 
-      {/* 요인별 흐름 */}
-      <div>
+      {/* 100% 기여도 구성 막대 — "몇% + 몇% = 100%" 를 한눈에 */}
+      <div className="px-5 pt-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[10.5px] font-extrabold uppercase tracking-widest text-slate-400">원인 구성</span>
+          <span className="text-[11px] font-extrabold text-slate-500 tabular-nums">합계 100%</span>
+        </div>
+
+        {/* 단일 누적 막대 (세그먼트 폭 = 각 요인 비중) */}
+        <div className="flex w-full h-8 overflow-hidden">
+          {segs.map(({ c, st, share }, i) => (
+            <div key={i} className={`${st.bar} h-full flex items-center justify-center ${i > 0 ? "border-l-2 border-white" : ""}`}
+              style={{ width: `${share}%` }} title={`${c.factor} ${c.contribution.toFixed(0)}%`}>
+              {share >= 11 && (
+                <span className="text-[11px] font-extrabold text-white tabular-nums leading-none px-0.5">{c.contribution.toFixed(0)}%</span>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* 범례 — 더하면 전체가 됨을 "+" 로 표현 */}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 mt-3">
+          {segs.map(({ c, st }, i) => (
+            <span key={i} className="inline-flex items-center gap-1.5 text-[11.5px]">
+              {i > 0 && <span className="text-slate-300 font-bold mr-0.5">+</span>}
+              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: st.hex }} />
+              <span className="font-semibold text-slate-600">{c.factor}</span>
+              <span className="font-extrabold tabular-nums" style={{ color: st.hex }}>{c.contribution.toFixed(0)}%</span>
+            </span>
+          ))}
+          <span className="inline-flex items-center gap-1 text-[11.5px] font-extrabold text-slate-400">
+            <span className="text-slate-300">=</span> 매출 변화 전체
+          </span>
+        </div>
+      </div>
+
+      {/* 요인별 상세 흐름 (요인 → 데이터 증거) */}
+      <div className="mt-4">
         {causes.map((c, i) => {
           const st = styleOf(c)
           return (
-            <div key={i} className="px-5 pt-4 pb-3 border-b border-slate-100">
-              {/* 요인 노드 */}
-              <div className="flex items-center justify-between gap-2 mb-1.5">
+            <div key={i} className="px-5 pt-4 pb-3.5 border-b border-slate-100">
+              {/* 요인 노드 + 비중 */}
+              <div className="flex items-center justify-between gap-2 mb-2.5">
                 <span className="flex items-center gap-1.5 text-[14px] font-bold text-slate-800">
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: st.hex }} />
                   <span style={{ color: st.hex }}>{st.icon}</span>{c.factor}
                 </span>
-                <span className="text-[17px] font-extrabold tabular-nums flex-shrink-0" style={{ color: st.hex }}>{c.contribution.toFixed(0)}%</span>
-              </div>
-              <div className="h-1.5 bg-slate-100 overflow-hidden mb-3">
-                <div className={`h-full ${st.bar} transition-all duration-700`} style={{ width: `${c.contribution}%` }} />
+                <span className="text-[16px] font-extrabold tabular-nums flex-shrink-0" style={{ color: st.hex }}>{c.contribution.toFixed(0)}%</span>
               </div>
 
               {/* 증거 노드들 (들여쓰기 + 좌측 레일로 요인에 연결) */}
@@ -233,17 +272,13 @@ export function CausalFlowMobile({ causes, trendPct, runwayDays }: Props) {
                   <div className="text-[12px] text-slate-500">{c.description}</div>
                 )}
               </div>
-
-              {/* 매출 기여 방향 표시 */}
-              <div className="flex items-center gap-1.5 mt-2.5 pl-1 text-[11px] font-semibold" style={{ color: st.hex }}>
-                <ArrowRight size={13} />매출 변화에 {c.contribution.toFixed(0)}%p 기여
-              </div>
             </div>
           )
         })}
       </div>
       <p className="text-[11px] text-slate-400 px-5 pt-3 leading-relaxed">
-        각 요인의 기여도(%)는 그 아래 <span className="font-semibold text-slate-500">데이터 증거(%p)</span>의 합으로 산정됩니다.
+        각 요인의 비중은 위처럼 <span className="font-semibold text-slate-500">합쳐서 100%</span>가 되고,
+        그 값은 아래 <span className="font-semibold text-slate-500">데이터 증거(%p)</span>의 합으로 산정됩니다.
       </p>
     </div>
   )

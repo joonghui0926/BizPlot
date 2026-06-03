@@ -81,35 +81,33 @@ export function DiagnosisPage({ store }: Props) {
             </div>
           </div>
 
-          {/* Revenue change stat row */}
+          {/* Revenue change stat row — flat, no gray box */}
           {state && (
-            <div className="mx-5 mb-1 rounded-2xl bg-slate-50 border border-slate-100 px-4 py-3">
-              <div className="flex items-center gap-5">
-                <div>
-                  <div className="text-[10px] text-slate-400 font-semibold">30일 매출 변화</div>
-                  <div className={`text-[22px] font-extrabold tabular-nums mt-0.5 ${(state.revenue_trend ?? 0) < 0 ? "text-red-600" : "text-green-600"}`}>
-                    {(state.revenue_trend ?? 0) > 0 ? "+" : ""}{((state.revenue_trend ?? 0) * 100).toFixed(1)}%
-                  </div>
+            <div className="px-5 pb-3 flex items-center gap-5">
+              <div>
+                <div className="text-[10px] text-slate-400 font-semibold">30일 매출 변화</div>
+                <div className={`text-[22px] font-extrabold tabular-nums mt-0.5 ${(state.revenue_trend ?? 0) < 0 ? "text-red-600" : "text-green-600"}`}>
+                  {(state.revenue_trend ?? 0) > 0 ? "+" : ""}{((state.revenue_trend ?? 0) * 100).toFixed(1)}%
                 </div>
-                {state.detail.recent_revenue_30d != null && (
-                  <>
-                    <div className="w-px h-8 bg-slate-200" />
-                    <div>
-                      <div className="text-[10px] text-slate-400">최근 30일</div>
-                      <div className="text-[16px] font-extrabold tabular-nums mt-0.5">
-                        ₩{((state.detail.recent_revenue_30d ?? 0) / 10000).toFixed(0)}만
-                      </div>
-                    </div>
-                    <div className="w-px h-8 bg-slate-200" />
-                    <div>
-                      <div className="text-[10px] text-slate-400">이전 30일</div>
-                      <div className="text-[16px] font-extrabold text-slate-400 tabular-nums mt-0.5">
-                        ₩{((state.detail.prior_revenue_30d ?? 0) / 10000).toFixed(0)}만
-                      </div>
-                    </div>
-                  </>
-                )}
               </div>
+              {state.detail.recent_revenue_30d != null && (
+                <>
+                  <div className="w-px h-8 bg-slate-200" />
+                  <div>
+                    <div className="text-[10px] text-slate-400">최근 30일</div>
+                    <div className="text-[16px] font-extrabold tabular-nums mt-0.5">
+                      ₩{((state.detail.recent_revenue_30d ?? 0) / 10000).toFixed(0)}만
+                    </div>
+                  </div>
+                  <div className="w-px h-8 bg-slate-200" />
+                  <div>
+                    <div className="text-[10px] text-slate-400">이전 30일</div>
+                    <div className="text-[16px] font-extrabold text-slate-400 tabular-nums mt-0.5">
+                      ₩{((state.detail.prior_revenue_30d ?? 0) / 10000).toFixed(0)}만
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
 

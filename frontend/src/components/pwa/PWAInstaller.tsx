@@ -30,30 +30,38 @@ export function PWAInstaller() {
       window.navigator.standalone === true
     if (standalone) return
 
-    // 3) 최근에 닫았으면 하루 동안 표시 안 함
+    // 3) 이번 세션(=로그인)에서 이미 한 번 떴으면 다시 표시하지 않는다.
+    //    탭 이동 시 컴포넌트가 다시 마운트되어도 sessionStorage가 유지되어 재노출을 막는다.
+    if (sessionStorage.getItem("pwa_seen")) return
+
+    // 4) 최근에 닫았으면 하루 동안 표시 안 함
     const dismissedAt = Number(localStorage.getItem("pwa_dismissed") || 0)
     if (Date.now() - dismissedAt < 24 * 60 * 60 * 1000) return
 
-    // 4) iOS 판별 (iPadOS 13+ 는 Mac 으로 위장 → 터치포인트로 보강)
+    // 배너를 실제로 노출할 때만 "이번 세션에 봤음"으로 표시 (한 번만 뜨도록)
+    const showOnce = (fn: () => void) => {
+      sessionStorage.setItem("pwa_seen", "1")
+      fn()
+    }
+
+    // 5) iOS 판별 (iPadOS 13+ 는 Mac 으로 위장 → 터치포인트로 보강)
     const ua = window.navigator.userAgent
     const ios =
       /iphone|ipad|ipod/i.test(ua) ||
       (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)
     const isSafari = /^((?!chrome|android|crios|fxios).)*safari/i.test(ua)
     if (ios && isSafari) {
-      setIsIOS(true)
-      setShow(true)
+      showOnce(() => { setIsIOS(true); setShow(true) })
     }
 
-    // 5) Android/Chrome: 설치 프롬프트 가로채기
+    // 6) Android/Chrome: 설치 프롬프트 가로채기
     const onBIP = (e: Event) => {
       e.preventDefault()
-      setDeferred(e as BIPEvent)
-      setShow(true)
+      showOnce(() => { setDeferred(e as BIPEvent); setShow(true) })
     }
     window.addEventListener("beforeinstallprompt", onBIP)
 
-    // 6) 설치 완료 시 배너 숨김
+    // 7) 설치 완료 시 배너 숨김
     const onInstalled = () => setShow(false)
     window.addEventListener("appinstalled", onInstalled)
 

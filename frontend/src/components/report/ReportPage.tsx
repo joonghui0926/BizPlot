@@ -154,8 +154,38 @@ export function ReportPage({ store }: Props) {
             )}
           </div>
 
+          {/* Downloads — 최상단 (가장 중요한 기능) */}
+          <div className="px-5 pt-5 pb-1">
+            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">리포트 다운로드</div>
+          </div>
+          <div className="px-5 pb-1 space-y-3">
+            {reportStatus === "idle" || reportStatus === "failed" ? (
+              <button onClick={handleCreateReport}
+                className="flex items-center justify-center gap-2 w-full py-4 rounded-2xl bg-blue-600 text-white font-bold text-[15px] shadow-lg shadow-blue-200">
+                <FileText size={17} />PDF 리포트 생성
+              </button>
+            ) : reportStatus === "creating" || reportStatus === "pending" ? (
+              <div className="flex items-center justify-center gap-2 w-full py-4 rounded-2xl bg-blue-100 text-blue-600 font-bold text-[15px]">
+                <Loader2 size={17} className="animate-spin" />생성 중...
+              </div>
+            ) : reportStatus === "done" && reportId ? (
+              <button onClick={handleDownloadPdf} disabled={downloading}
+                className="flex items-center justify-center gap-2 w-full py-4 rounded-2xl bg-blue-600 text-white font-bold text-[15px] shadow-lg shadow-blue-200 disabled:opacity-60">
+                {downloading ? <Loader2 size={17} className="animate-spin" /> : <Download size={17} />}
+                {downloading ? "다운로드 중..." : "PDF 다운로드"}
+              </button>
+            ) : null}
+
+            <button onClick={handleDownloadCsv} disabled={downloading}
+              className="flex items-center justify-center gap-2 w-full py-3.5 rounded-2xl bg-white text-slate-700 font-semibold text-[14px] border border-slate-200 disabled:opacity-60">
+              {downloading ? <Loader2 size={16} className="animate-spin" /> : <FileDown size={16} />}
+              {downloading ? "다운로드 중..." : "데이터 CSV 내보내기"}
+            </button>
+          </div>
+
           {/* TOC — flat list */}
-          <div className="px-5 pt-3 pb-1">
+          <div className="h-2 bg-slate-100 border-y border-slate-100 mt-4" />
+          <div className="px-5 pt-4 pb-1">
             <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">목차</div>
           </div>
           {tocItems.map((item, i) => (
@@ -226,34 +256,10 @@ export function ReportPage({ store }: Props) {
             </>
           )}
 
-          {/* Actions */}
+          {/* JB Connect CTA */}
           <div className="h-2 bg-slate-100 border-y border-slate-100" />
-          <div className="px-5 py-5 space-y-3">
-            {reportStatus === "idle" || reportStatus === "failed" ? (
-              <button onClick={handleCreateReport}
-                className="flex items-center justify-center gap-2 w-full py-4 rounded-2xl bg-blue-600 text-white font-bold text-[15px] shadow-lg shadow-blue-200">
-                <FileText size={17} />PDF 리포트 생성
-              </button>
-            ) : reportStatus === "creating" || reportStatus === "pending" ? (
-              <div className="flex items-center justify-center gap-2 w-full py-4 rounded-2xl bg-blue-100 text-blue-600 font-bold text-[15px]">
-                <Loader2 size={17} className="animate-spin" />생성 중...
-              </div>
-            ) : reportStatus === "done" && reportId ? (
-              <button onClick={handleDownloadPdf} disabled={downloading}
-                className="flex items-center justify-center gap-2 w-full py-4 rounded-2xl bg-blue-600 text-white font-bold text-[15px] shadow-lg shadow-blue-200 disabled:opacity-60">
-                {downloading ? <Loader2 size={17} className="animate-spin" /> : <Download size={17} />}
-                {downloading ? "다운로드 중..." : "PDF 다운로드"}
-              </button>
-            ) : null}
-
-            <button onClick={handleDownloadCsv} disabled={downloading}
-              className="flex items-center justify-center gap-2 w-full py-3.5 rounded-2xl bg-slate-50 text-slate-700 font-semibold text-[14px] border border-slate-200 disabled:opacity-60">
-              {downloading ? <Loader2 size={16} className="animate-spin" /> : <FileDown size={16} />}
-              {downloading ? "다운로드 중..." : "데이터 CSV 내보내기"}
-            </button>
-
-            {/* JB Connect CTA */}
-            <div className="bg-gradient-to-br from-blue-700 to-blue-900 rounded-2xl p-5 text-white mt-1">
+          <div className="px-5 py-5">
+            <div className="bg-gradient-to-br from-blue-700 to-blue-900 rounded-2xl p-5 text-white">
               <div className="text-[14px] font-extrabold mb-1">JB금융그룹 상담 연결</div>
               <div className="text-white/70 text-[12px] mb-4 leading-relaxed">
                 진단 리포트를 바탕으로 전북은행·광주은행 소상공인 전담 상담을 신청할 수 있습니다.
