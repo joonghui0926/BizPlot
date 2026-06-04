@@ -48,16 +48,20 @@ def collect_external_signals(store: Store, db: Session):
 # ────────────────────────────────────────────────────────────────
 def _collect_commerce_radius(store: Store, db: Session) -> bool:
     try:
+        params = {
+            "serviceKey": settings.DATA_GO_KR_KEY,
+            "radius": 500,
+            "cx": store.longitude,
+            "cy": store.latitude,
+            "type": "json",
+        }
+        category_code = _category_to_code(store.category)
+        if category_code:
+            params["indsLclsCd"] = category_code
+
         resp = httpx.get(
             f"{DATA_GO_URL}/B553077/api/open/sdsc2/storeListInRadius",
-            params={
-                "serviceKey": settings.DATA_GO_KR_KEY,
-                "radius": 500,
-                "cx": store.longitude,
-                "cy": store.latitude,
-                "indsLclsCd": _category_to_code(store.category),
-                "type": "json",
-            },
+            params=params,
             timeout=15,
         )
         data = resp.json()
@@ -376,7 +380,8 @@ def _category_to_code(category: str) -> str:
     return {
         "cafe": "I2", "restaurant": "I2", "bakery": "I2",
         "beauty": "Q", "laundry": "Q", "retail": "G",
-    }.get(category, "I2")
+        "other": "",
+    }.get(category, "")
 
 
 def _address_to_area_code(address: str) -> str:
