@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Eye, EyeOff, ArrowRight } from "lucide-react"
 import { FinPilotMark } from "@/components/ui/FinPilotLogo"
-import { login, listStores } from "@/lib/api"
+import { login, listStores, oauthLoginUrl } from "@/lib/api"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -37,8 +37,7 @@ export default function LoginPage() {
   }
 
   const handleSocialLogin = (provider: "google" | "kakao") => {
-    // OAuth redirect — 백엔드에서 구성 후 활성화
-    window.location.href = `${process.env.NEXT_PUBLIC_API_URL?.replace("/api", "")}/auth/${provider}`
+    window.location.href = oauthLoginUrl(provider)
   }
 
   return (

@@ -1,8 +1,8 @@
 import axios from "axios"
 
-const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://api.bizplot.co.kr/api"
 
-const api = axios.create({ baseURL: BASE })
+const api = axios.create({ baseURL: API_BASE })
 
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
@@ -18,6 +18,9 @@ api.interceptors.response.use(
 )
 
 export default api
+
+export const oauthLoginUrl = (provider: "google" | "kakao") =>
+  `${API_BASE}/auth/${provider}`
 
 // Auth
 export const register = (email: string, password: string, name: string) =>
@@ -56,4 +59,4 @@ export const getReport = (reportId: string) => api.get(`/stores/reports/${report
 export const getReviewSignals = (storeId: string) =>
   api.get(`/stores/${storeId}/reviews/signals`)
 export const downloadReport = (reportId: string) =>
-  `${BASE}/stores/reports/${reportId}/download`
+  `${API_BASE}/stores/reports/${reportId}/download`

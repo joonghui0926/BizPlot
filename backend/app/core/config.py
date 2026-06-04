@@ -57,6 +57,15 @@ class Settings(BaseSettings):
     GOOGLE_PLACES_API_KEY: str = ""
     TOUR_API_KEY: str = ""
 
+    # OAuth Login
+    FRONTEND_URL: str = "http://localhost:3000"
+    KAKAO_REST_API_KEY: str = ""
+    KAKAO_CLIENT_SECRET: str = ""
+    KAKAO_REDIRECT_URI: str = "http://localhost:8000/api/auth/kakao/callback"
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/auth/google/callback"
+
     # Security
     SECRET_KEY: str = "finpilot-dev-secret-key-change-in-production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days

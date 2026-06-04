@@ -8,7 +8,7 @@
 .cloudflared/
 
 # ───────── 대용량 모델·바이너리 (수십 GB) ─────────
-models/
+/models/
 !models/Modelfile
 *.gguf
 *.safetensors

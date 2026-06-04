@@ -2,9 +2,9 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Eye, EyeOff, ArrowRight, CheckCircle2 } from "lucide-react"
+import { Eye, EyeOff, ArrowRight } from "lucide-react"
 import { FinPilotMark } from "@/components/ui/FinPilotLogo"
-import { register } from "@/lib/api"
+import { oauthLoginUrl, register } from "@/lib/api"
 
 export default function RegisterPage() {
   const [name, setName] = useState("")
@@ -17,6 +17,10 @@ export default function RegisterPage() {
 
   const pwStrength = password.length === 0 ? 0 : password.length < 6 ? 1 : password.length < 10 ? 2 : 3
 
+  const handleSocialLogin = (provider: "google" | "kakao") => {
+    window.location.href = oauthLoginUrl(provider)
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (password.length < 6) { setError("비밀번호는 6자 이상이어야 합니다."); return }
@@ -25,8 +29,8 @@ export default function RegisterPage() {
       const r = await register(email, password, name)
       localStorage.setItem("token", r.data.access_token)
       router.push("/onboarding")
-    } catch (err: any) {
-      const detail = err?.response?.data?.detail
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
       setError(detail === "Email already registered" ? "이미 가입된 이메일입니다." : "회원가입에 실패했습니다.")
     } finally {
       setLoading(false)
@@ -84,7 +88,7 @@ export default function RegisterPage() {
           {/* Social buttons */}
           <div className="grid grid-cols-2 gap-3 mb-5">
             <button
-              onClick={() => window.location.href = `${process.env.NEXT_PUBLIC_API_URL?.replace("/api","")}/auth/kakao`}
+              onClick={() => handleSocialLogin("kakao")}
               className="flex items-center justify-center gap-2 py-3 rounded-xl bg-[#FEE500] text-[#3C1E1E] font-semibold text-[13.5px] hover:bg-[#F5DC00] transition-colors"
             >
               <svg viewBox="0 0 24 24" width="18" height="18" fill="#3C1E1E">
@@ -93,7 +97,7 @@ export default function RegisterPage() {
               카카오
             </button>
             <button
-              onClick={() => window.location.href = `${process.env.NEXT_PUBLIC_API_URL?.replace("/api","")}/auth/google`}
+              onClick={() => handleSocialLogin("google")}
               className="flex items-center justify-center gap-2 py-3 rounded-xl bg-white border border-slate-200 text-slate-700 font-semibold text-[13.5px] hover:bg-slate-50 transition-colors"
             >
               <svg viewBox="0 0 24 24" width="18" height="18">
