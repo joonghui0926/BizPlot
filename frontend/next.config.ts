@@ -1,13 +1,16 @@
 import type { NextConfig } from "next";
 
+const backendOrigin =
+  process.env.API_REWRITE_ORIGIN ||
+  (process.env.VERCEL ? "https://api.bizplot.co.kr" : "http://localhost:8000");
+
 const nextConfig: NextConfig = {
-  // 브라우저가 어떤 호스트(터널/직접IP/localhost)로 접속하든 API가 닿도록
-  // 같은 오리진 /api 요청을 백엔드(FastAPI :8000)로 서버사이드 프록시한다.
+  // 로컬에서는 FastAPI(:8000), Vercel에서는 공개 API 도메인으로 프록시한다.
   async rewrites() {
     return [
       {
         source: "/api/:path*",
-        destination: "http://localhost:8000/api/:path*",
+        destination: `${backendOrigin}/api/:path*`,
       },
     ];
   },
