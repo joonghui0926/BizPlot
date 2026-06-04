@@ -91,7 +91,8 @@ def analyze_causes(store: Store, state: BusinessState, db: Session) -> Diagnosis
         causes, review_causes, summary = _rule_based(state, ctx, review_sig)
 
     # 최소 원인 보장 + 가산성 재정규화 + basis(증거→근거) 동기화
-    causes = _ensure_min_causes(causes, ctx, minimum=4)
+    minimum_causes = 1 if ctx.get("trend_pct", 0) >= 0 else 4
+    causes = _ensure_min_causes(causes, ctx, minimum=minimum_causes)
     for c in causes:
         _sync_basis(c)
     if not summary and causes:
@@ -266,6 +267,9 @@ def build_causal_graph(store, state, ctx: dict) -> dict:
 
 def _volume_factors(ctx: dict, direction: str) -> list[dict]:
     """매출 물량(객수) 변화를 설명하는 요인 노드 후보. 각 증거는 실측값+정량 점수를 가진다."""
+    if direction == "증가":
+        return _growth_factors(ctx)
+
     factors: list[dict] = []
     comp = ctx["competitors"]
     new_comp = ctx["new_competitors"]
@@ -384,19 +388,113 @@ def _volume_factors(ctx: dict, direction: str) -> list[dict]:
     return factors
 
 
+def _growth_factors(ctx: dict) -> list[dict]:
+    """매출 증가를 설명하는 요인 노드 후보. 리스크 요인은 원인으로 끌어오지 않는다."""
+    factors: list[dict] = []
+
+    txn_delta = (ctx["txn_r"] - ctx["txn_p"]) / ctx["txn_p"] * 100 if ctx["txn_p"] else 0
+    if txn_delta > 3:
+        factors.append({
+            "factor": "거래건수 증가", "group": "demand", "confidence": "high",
+            "description": f"일평균 거래건수 {ctx['txn_p']:.0f}→{ctx['txn_r']:.0f}건으로 구매 전환이 늘었습니다.",
+            "evidence": [{
+                "id": "demand_txn_growth", "metric": "txn", "raw_value": round(ctx["txn_r"], 0),
+                "delta": f"{ctx['txn_p']:.0f}→{ctx['txn_r']:.0f}건",
+                "label": f"일평균 거래건수 {ctx['txn_p']:.0f}→{ctx['txn_r']:.0f}건",
+                "when": "최근 30일", "mechanism": "거래건수 증가 → 매출 베이스 확대",
+                "source": "sales_daily", "_score": min(txn_delta, 80) * 0.5,
+            }],
+            "_score": min(txn_delta, 80) * 0.5,
+        })
+
+    peak_segments = [
+        ("점심 시간대 매출 집중", "lunch_pct", "점심(11-13시)", ctx["lunch_pct"]),
+        ("오후 시간대 매출 집중", "afternoon_pct", "오후(13-17시)", ctx["afternoon_pct"]),
+        ("저녁 시간대 매출 집중", "evening_pct", "저녁(17-21시)", ctx["evening_pct"]),
+    ]
+    peak_name, metric, label, pct = max(peak_segments, key=lambda x: x[3])
+    if pct >= 35:
+        score = min(pct - 30, 35) * 0.35
+        factors.append({
+            "factor": peak_name, "group": "timeofday", "confidence": "medium",
+            "description": f"{label} 매출 비중이 {pct:.0f}%로 최근 매출을 견인했습니다.",
+            "evidence": [{
+                "id": f"tod_{metric}_growth", "metric": metric, "raw_value": round(pct, 1),
+                "delta": "", "label": f"{label} 매출 비중 {pct:.0f}%",
+                "when": "최근 30일", "mechanism": "핵심 시간대 수요 집중 → 일 매출 상승",
+                "source": "sales_hourly", "_score": score,
+            }],
+            "_score": score,
+        })
+
+    if ctx["weekend_pct"] >= 30:
+        score = min(ctx["weekend_pct"] - 24, 30) * 0.25
+        factors.append({
+            "factor": "주말 수요 확대", "group": "timeofday", "confidence": "medium",
+            "description": f"주말 매출 비중이 {ctx['weekend_pct']:.0f}%로 주말 유입이 매출 상승에 기여했습니다.",
+            "evidence": [{
+                "id": "tod_weekend_growth", "metric": "weekend_pct",
+                "raw_value": round(ctx["weekend_pct"], 1), "delta": "",
+                "label": f"주말 매출 비중 {ctx['weekend_pct']:.0f}%",
+                "when": "주말", "mechanism": "주말 방문·구매 증가 → 주간 매출 확대",
+                "source": "sales_weekday", "_score": score,
+            }],
+            "_score": score,
+        })
+
+    if ctx["sentiment"] is not None and ctx["sentiment"] > 0.25:
+        sent_pct = int((ctx["sentiment"] + 1) * 50)
+        score = min(max(sent_pct - 60, 0), 35) * 0.25
+        if score > 0:
+            factors.append({
+                "factor": "고객 반응 개선", "group": "review", "confidence": "medium",
+                "description": f"리뷰 감성 점수 {sent_pct}/100으로 긍정 반응이 매출 상승을 뒷받침했습니다.",
+                "evidence": [{
+                    "id": "rv_sentiment_growth", "metric": "sentiment", "raw_value": sent_pct,
+                    "delta": "", "label": f"리뷰 감성 점수 {sent_pct}/100",
+                    "when": "최근 리뷰 기간", "mechanism": "긍정 경험 축적 → 재방문·전환 개선",
+                    "source": "review_signal", "_score": score,
+                }],
+                "_score": score,
+            })
+
+    if not factors:
+        factors.append({
+            "factor": "전반적 구매 단가·전환 개선", "group": "demand", "confidence": "low",
+            "description": f"최근 30일 매출이 ₩{ctx['rev_p']:,.0f}→₩{ctx['rev_r']:,.0f}로 증가했습니다.",
+            "evidence": [{
+                "id": "revenue_growth_residual", "metric": "revenue", "raw_value": round(ctx["rev_r"], 0),
+                "delta": f"₩{ctx['rev_p']:,.0f}→₩{ctx['rev_r']:,.0f}",
+                "label": f"최근 30일 매출 ₩{ctx['rev_p']:,.0f}→₩{ctx['rev_r']:,.0f}",
+                "when": "최근 30일", "mechanism": "거래 구성·전환 개선으로 매출 증가",
+                "source": "sales_daily", "_score": 1.0,
+            }],
+            "_score": 1.0,
+        })
+    return factors
+
+
 def _price_factor(ctx: dict, price_adv: float, direction: str) -> dict:
     """단가(객단가) 효과를 별도 요인으로. weight는 정규화 단계에서 _pp로 부여."""
     p_from, p_to = ctx["price_p"], ctx["price_r"]
+    if direction == "증가":
+        factor = "객단가·주문 구성 상승"
+        mechanism = "객단가 상승(고가 메뉴·세트·추가 구매 비중 확대) → 같은 객수에서도 매출 증가"
+        description = f"객단가 ₩{p_from:,.0f}→₩{p_to:,.0f}로 1인당 구매액이 늘었습니다."
+    else:
+        factor = "객단가·구성 변화"
+        mechanism = "객단가 하락(세트·고마진 비중 축소) → 동일 객수에도 매출 감소"
+        description = f"객단가 ₩{p_from:,.0f}→₩{p_to:,.0f}로 1인당 구매액이 줄었습니다."
     ev = {
         "id": "price_ticket", "metric": "avg_ticket", "raw_value": round(p_to, 0),
         "delta": f"₩{p_from:,.0f}→₩{p_to:,.0f}",
         "label": f"객단가 ₩{p_from:,.0f}→₩{p_to:,.0f}",
-        "when": "최근 30일", "mechanism": "객단가 하락(세트·고마진 비중 축소) → 동일 객수에도 매출 감소",
+        "when": "최근 30일", "mechanism": mechanism,
         "source": "sales_bridge", "_score": price_adv, "_pp": price_adv,
     }
     return {
-        "factor": "객단가·구성 변화", "group": "price", "confidence": "high",
-        "description": f"객단가 ₩{p_from:,.0f}→₩{p_to:,.0f}로 1인당 구매액 변화",
+        "factor": factor, "group": "price", "confidence": "high",
+        "description": description,
         "evidence": [ev], "_score": price_adv,
     }
 
@@ -539,6 +637,9 @@ def _parse_json(text: str) -> dict | None:
 
 def _candidate_causes(ctx: dict) -> list[dict]:
     """데이터 기반 후보 원인 풀 (보강용). 실제 ctx 수치를 description+basis(정량 근거)에 반영."""
+    if ctx["trend_pct"] >= 0:
+        return _growth_candidate_causes(ctx)
+
     txn_delta = (ctx["txn_r"] - ctx["txn_p"]) / ctx["txn_p"] * 100 if ctx["txn_p"] else 0
     pool = []
     if ctx["competitors"] >= 3:
@@ -612,6 +713,62 @@ def _candidate_causes(ctx: dict) -> list[dict]:
     return pool
 
 
+def _growth_candidate_causes(ctx: dict) -> list[dict]:
+    """매출 증가 국면에서만 쓰는 보강 후보. 경쟁/비용 압박은 원인이 아니라 별도 리스크다."""
+    txn_delta = (ctx["txn_r"] - ctx["txn_p"]) / ctx["txn_p"] * 100 if ctx["txn_p"] else 0
+    ticket_delta = (ctx["price_r"] - ctx["price_p"]) / ctx["price_p"] * 100 if ctx["price_p"] else 0
+    pool = []
+    if ticket_delta > 3:
+        pool.append({"factor": "객단가·주문 구성 상승", "contribution": 34,
+                     "confidence": "high",
+                     "description": f"객단가 ₩{ctx['price_p']:,.0f}→₩{ctx['price_r']:,.0f}로 1인당 구매액이 증가했습니다.",
+                     "basis": [
+                         f"객단가 ₩{ctx['price_p']:,.0f}→₩{ctx['price_r']:,.0f} ({ticket_delta:+.0f}%)",
+                         f"최근 30일 매출 ₩{ctx['rev_r']:,.0f}, 이전 30일 ₩{ctx['rev_p']:,.0f}",
+                         "거래건수가 줄었거나 정체돼도 객단가 상승은 매출 증가를 설명할 수 있음",
+                     ]})
+    if txn_delta > 3:
+        pool.append({"factor": "일평균 거래건수 증가", "contribution": 28,
+                     "confidence": "high",
+                     "description": f"일평균 거래건수 {ctx['txn_p']:.0f}→{ctx['txn_r']:.0f}건으로 구매 전환이 늘었습니다.",
+                     "basis": [
+                         f"일평균 거래 {ctx['txn_p']:.0f}→{ctx['txn_r']:.0f}건 ({txn_delta:+.0f}%)",
+                         "거래건수 증가 = 방문·전환 증가 신호",
+                     ]})
+    peak_segments = [
+        ("점심 시간대 매출 집중", ctx["lunch_pct"], "점심(11-13시)"),
+        ("오후 시간대 매출 집중", ctx["afternoon_pct"], "오후(13-17시)"),
+        ("저녁 시간대 매출 집중", ctx["evening_pct"], "저녁(17-21시)"),
+    ]
+    peak_factor, peak_pct, peak_label = max(peak_segments, key=lambda x: x[1])
+    if peak_pct >= 30:
+        pool.append({"factor": peak_factor, "contribution": 18,
+                     "confidence": "medium",
+                     "description": f"{peak_label} 매출 비중 {peak_pct:.0f}%로 핵심 시간대 수요가 매출을 견인했습니다.",
+                     "basis": [
+                         f"{peak_label} 매출 비중 {peak_pct:.0f}%",
+                         f"점심 {ctx['lunch_pct']:.0f}% / 오후 {ctx['afternoon_pct']:.0f}% / 저녁 {ctx['evening_pct']:.0f}%",
+                     ]})
+    if ctx["weekend_pct"] >= 30:
+        pool.append({"factor": "주말 수요 확대", "contribution": 14,
+                     "confidence": "medium",
+                     "description": f"주말 매출 비중 {ctx['weekend_pct']:.0f}%로 주말 유입이 매출 상승에 기여했습니다.",
+                     "basis": [
+                         f"주말 매출 비중 {ctx['weekend_pct']:.0f}%",
+                         "주말 방문·구매 증가가 주간 매출을 보강",
+                     ]})
+    if not pool:
+        pool.append({"factor": "최근 30일 매출 확대", "contribution": 24,
+                     "confidence": "low",
+                     "description": f"최근 30일 매출이 ₩{ctx['rev_p']:,.0f}→₩{ctx['rev_r']:,.0f}로 증가했습니다.",
+                     "basis": [
+                         f"최근 30일 매출 ₩{ctx['rev_r']:,.0f}",
+                         f"이전 30일 매출 ₩{ctx['rev_p']:,.0f}",
+                         "거래건수·객단가·시간대별 세부 데이터 추가 확인 필요",
+                     ]})
+    return pool
+
+
 def _ensure_min_causes(causes: list, ctx: dict, minimum: int = 4) -> list:
     """원인이 minimum개 미만이면 데이터 기반 후보로 보강하고 100%로 재정규화한다."""
     causes = [c for c in (causes or []) if isinstance(c, dict) and c.get("factor")]
@@ -645,6 +802,19 @@ def _ensure_min_causes(causes: list, ctx: dict, minimum: int = 4) -> list:
 
 def _rule_based(state, ctx, review_sig):
     causes = []
+
+    if ctx["trend_pct"] >= 3:
+        causes = _growth_candidate_causes(ctx)
+        total = sum(c["contribution"] for c in causes) or 1
+        scale = 100 / total
+        for c in causes:
+            c["contribution"] = round(c["contribution"] * scale, 1)
+        causes.sort(key=lambda x: x["contribution"], reverse=True)
+        top = causes[0]
+        summary = f"매출 상승의 주요 원인은 '{top['factor']}'({top['contribution']:.0f}%)입니다."
+        if len(causes) > 1:
+            summary += f" '{causes[1]['factor']}'({causes[1]['contribution']:.0f}%)도 함께 작용했습니다."
+        return causes, _review_causes(ctx), summary
 
     if ctx["trend_pct"] < -3:
         causes.append({

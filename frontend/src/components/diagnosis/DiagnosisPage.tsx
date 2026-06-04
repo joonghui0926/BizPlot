@@ -41,6 +41,7 @@ export function DiagnosisPage({ store }: Props) {
   const state = data?.state
   const causes = diagnosis?.causes ?? []
   const reviewCauses = diagnosis?.review_causes ?? []
+  const trendIsUp = (state?.revenue_trend ?? 0) >= 0
 
   return (
     <AppShell store={store}>
@@ -75,8 +76,8 @@ export function DiagnosisPage({ store }: Props) {
           <div className="px-5 pt-4 pb-3">
             <div className="text-[19px] font-extrabold leading-tight tracking-tight text-slate-900">
               {diagnosis.summary
-                ? <span dangerouslySetInnerHTML={{ __html: diagnosis.summary.replace(/(\d+(\.\d+)?%)/g, '<em class="not-italic text-red-600">$1</em>') }} />
-                : "매출 하락 원인을 분석했습니다."
+                ? <span dangerouslySetInnerHTML={{ __html: diagnosis.summary.replace(/(\d+(\.\d+)?%)/g, `<em class="not-italic ${trendIsUp ? "text-green-600" : "text-red-600"}">$1</em>`) }} />
+                : trendIsUp ? "매출 상승 요인을 분석했습니다." : "매출 하락 원인을 분석했습니다."
               }
             </div>
           </div>
@@ -199,7 +200,7 @@ export function DiagnosisPage({ store }: Props) {
             <div className="border-b border-slate-100 pb-6 mb-0">
               <h1 className="text-2xl font-extrabold tracking-tight">원인 분석</h1>
               <p className="text-sm text-slate-400 mt-0.5">
-                {diagnosis.summary || "매출 하락 요인을 기여도 순으로 분석했습니다."}
+                {diagnosis.summary || (trendIsUp ? "매출 상승 요인을 기여도 순으로 분석했습니다." : "매출 하락 요인을 기여도 순으로 분석했습니다.")}
               </p>
             </div>
 
